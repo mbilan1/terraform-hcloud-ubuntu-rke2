@@ -6,7 +6,7 @@ terraform {
     }
     remote = {
       source  = "tenstad/remote"
-      version = "0.1.2"
+      version = "0.2.1"
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
@@ -14,7 +14,7 @@ terraform {
     }
     kubectl = {
       source  = "gavinbunney/kubectl"
-      version = "~> 1.14.0"
+      version = "1.19.0"
     }
   }
 }
@@ -28,7 +28,7 @@ provider "cloudflare" {
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     host = local.cluster_host
 
     client_certificate     = local.client_cert

@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "monitoring" {
+resource "kubernetes_namespace_v1" "monitoring" {
   depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
   count      = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
   metadata {
@@ -13,7 +13,7 @@ resource "kubernetes_namespace" "monitoring" {
 }
 
 resource "helm_release" "prom_stack" {
-  depends_on = [kubernetes_namespace.monitoring, helm_release.loki, kubernetes_config_map_v1.dashboard, helm_release.tempo]
+  depends_on = [kubernetes_namespace_v1.monitoring, helm_release.loki, kubernetes_config_map_v1.dashboard, helm_release.tempo]
 
   count = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
   name  = "prom-stack"
@@ -28,7 +28,7 @@ resource "helm_release" "prom_stack" {
 }
 
 resource "helm_release" "loki" {
-  depends_on = [kubernetes_namespace.monitoring]
+  depends_on = [kubernetes_namespace_v1.monitoring]
 
   count = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
   name  = "loki"
@@ -42,7 +42,7 @@ resource "helm_release" "loki" {
 }
 
 resource "kubernetes_ingress_v1" "monitoring_ingress" {
-  depends_on = [kubernetes_namespace.monitoring]
+  depends_on = [kubernetes_namespace_v1.monitoring]
 
   count = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
   metadata {
@@ -106,7 +106,7 @@ resource "kubernetes_ingress_v1" "monitoring_ingress" {
 }
 
 resource "kubernetes_config_map_v1" "dashboard" {
-  depends_on = [kubernetes_namespace.monitoring]
+  depends_on = [kubernetes_namespace_v1.monitoring]
 
   count = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
   metadata {

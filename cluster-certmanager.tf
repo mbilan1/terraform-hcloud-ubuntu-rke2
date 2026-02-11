@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "cert_manager" {
+resource "kubernetes_namespace_v1" "cert_manager" {
   depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
   count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
   metadata {
@@ -13,8 +13,8 @@ resource "kubernetes_namespace" "cert_manager" {
   }
 }
 
-resource "kubernetes_secret" "cert_manager" {
-  depends_on = [kubernetes_namespace.cert_manager]
+resource "kubernetes_secret_v1" "cert_manager" {
+  depends_on = [kubernetes_namespace_v1.cert_manager]
   count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
   metadata {
     name      = "cloudflare-api-token-secret"
@@ -33,7 +33,7 @@ resource "kubernetes_secret" "cert_manager" {
 }
 
 resource "helm_release" "cert_manager" {
-  depends_on = [kubernetes_namespace.cert_manager]
+  depends_on = [kubernetes_namespace_v1.cert_manager]
   count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
 
   name = "cert-manager"
@@ -44,14 +44,14 @@ resource "helm_release" "cert_manager" {
 
   namespace = "cert-manager"
 
-  set {
+  set = [{
     name  = "installCRDs"
     value = "true"
-  }
+  }]
 }
 
 resource "kubectl_manifest" "cert_manager_issuer" {
-  depends_on = [kubernetes_secret.cert_manager, helm_release.cert_manager]
+  depends_on = [kubernetes_secret_v1.cert_manager, helm_release.cert_manager]
   count      = var.cluster_configuration.cert_manager.use_for_preinstalled_components ? 1 : 0
   yaml_body  = <<YAML
 apiVersion: cert-manager.io/v1

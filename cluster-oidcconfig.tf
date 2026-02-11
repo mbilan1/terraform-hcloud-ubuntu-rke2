@@ -58,7 +58,7 @@ resource "kubernetes_ingress_v1" "oidc" {
   }
 }
 
-resource "kubernetes_cluster_role_binding" "oidc" {
+resource "kubernetes_cluster_role_binding_v1" "oidc" {
   count = var.expose_oidc_issuer_url != null ? 1 : 0
   metadata {
     name = "service-account-issuer-discovery"

@@ -1,4 +1,4 @@
-resource "kubernetes_namespace" "kured" {
+resource "kubernetes_namespace_v1" "kured" {
   depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
   count      = var.enable_auto_os_updates && local.is_ha_cluster ? 1 : 0
   metadata {
@@ -13,12 +13,12 @@ resource "kubernetes_namespace" "kured" {
 }
 
 resource "helm_release" "kured" {
-  depends_on = [kubernetes_namespace.kured]
+  depends_on = [kubernetes_namespace_v1.kured]
   count      = var.enable_auto_os_updates && local.is_ha_cluster ? 1 : 0
   repository = "https://kubereboot.github.io/charts"
   chart      = "kured"
   name       = "kured"
-  namespace  = kubernetes_namespace.kured[0].metadata[0].name
+  namespace  = kubernetes_namespace_v1.kured[0].metadata[0].name
   version    = "3.0.1"
 }
 
