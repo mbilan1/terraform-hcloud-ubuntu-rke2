@@ -1,5 +1,5 @@
 resource "kubernetes_namespace_v1" "cert_manager" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
+  depends_on = [time_sleep.wait_30_seconds, hcloud_server.master, hcloud_server.additional_masters, hcloud_server.worker]
   count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
   metadata {
     name = "cert-manager"

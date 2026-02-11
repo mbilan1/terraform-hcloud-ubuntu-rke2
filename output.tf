@@ -31,7 +31,7 @@ output "management_network_name" {
 }
 
 output "cluster_master_nodes_ipv4" {
-  value = hcloud_server.master[*].ipv4_address
+  value = concat(hcloud_server.master[*].ipv4_address, hcloud_server.additional_masters[*].ipv4_address)
 }
 
 output "cluster_worker_nodes_ipv4" {

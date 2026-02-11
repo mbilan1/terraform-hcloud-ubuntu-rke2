@@ -1,5 +1,5 @@
 resource "kubernetes_ingress_v1" "oidc" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
+  depends_on = [time_sleep.wait_30_seconds, hcloud_server.master, hcloud_server.additional_masters, hcloud_server.worker]
   count      = var.expose_oidc_issuer_url != null ? 1 : 0
 
   metadata {
@@ -59,6 +59,7 @@ resource "kubernetes_ingress_v1" "oidc" {
 }
 
 resource "kubernetes_cluster_role_binding_v1" "oidc" {
+  depends_on = [time_sleep.wait_30_seconds, hcloud_server.master, hcloud_server.additional_masters, hcloud_server.worker]
   count = var.expose_oidc_issuer_url != null ? 1 : 0
   metadata {
     name = "service-account-issuer-discovery"

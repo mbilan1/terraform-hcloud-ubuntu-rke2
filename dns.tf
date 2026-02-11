@@ -1,5 +1,5 @@
 locals {
-  ip_addresses = concat(hcloud_server.master[*].ipv4_address, hcloud_server.worker[*].ipv4_address)
+  ip_addresses = concat(hcloud_server.master[*].ipv4_address, hcloud_server.additional_masters[*].ipv4_address, hcloud_server.worker[*].ipv4_address)
 }
 
 resource "cloudflare_record" "wildcard" {

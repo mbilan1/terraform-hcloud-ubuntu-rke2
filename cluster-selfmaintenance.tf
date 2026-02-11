@@ -1,5 +1,5 @@
 resource "kubernetes_namespace_v1" "kured" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
+  depends_on = [time_sleep.wait_30_seconds, hcloud_server.master, hcloud_server.additional_masters, hcloud_server.worker]
   count      = var.enable_auto_os_updates && local.is_ha_cluster ? 1 : 0
   metadata {
     name = "kured"
@@ -28,7 +28,7 @@ data "http" "system_upgrade_controller_crds" {
 }
 
 resource "kubectl_manifest" "system_upgrade_controller_crds" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service]
+  depends_on = [time_sleep.wait_30_seconds, hcloud_server.master, hcloud_server.additional_masters, hcloud_server.worker]
   for_each   = var.enable_auto_kubernetes_updates && local.is_ha_cluster ? { for i in local.system_upgrade_controller_crds : index(local.system_upgrade_controller_crds, i) => i } : {}
   yaml_body  = each.value
 }
@@ -39,13 +39,13 @@ data "http" "system_upgrade_controller" {
 }
 
 resource "kubectl_manifest" "system_upgrade_controller_ns" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service, kubectl_manifest.system_upgrade_controller_crds]
+  depends_on = [null_resource.wait_for_api, kubectl_manifest.system_upgrade_controller_crds]
   for_each   = var.enable_auto_kubernetes_updates && local.is_ha_cluster ? { for i in local.system_upgrade_controller_components : index(local.system_upgrade_controller_components, i) => i if strcontains(i, "kind: Namespace")} : {}
   yaml_body  = each.value
 }
 
 resource "kubectl_manifest" "system_upgrade_controller" {
-  depends_on = [hcloud_load_balancer_service.management_lb_k8s_service, kubectl_manifest.system_upgrade_controller_crds, kubectl_manifest.system_upgrade_controller_ns]
+  depends_on = [null_resource.wait_for_api, kubectl_manifest.system_upgrade_controller_crds, kubectl_manifest.system_upgrade_controller_ns]
   for_each   = var.enable_auto_kubernetes_updates && local.is_ha_cluster ? { for i in local.system_upgrade_controller_components : index(local.system_upgrade_controller_components, i) => i if !strcontains(i, "kind: Namespace")} : {}
   yaml_body  = each.value
 }

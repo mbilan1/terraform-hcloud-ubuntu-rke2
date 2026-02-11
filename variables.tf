@@ -80,8 +80,8 @@ variable "network_address" {
 
 variable "node_locations" {
   type        = list(string)
-  default     = ["hel1", "nbg1", "fsn1"]
-  description = "Define the location in which nodes will be deployed. (Most be in the same network zone.)"
+  default     = ["hel1", "nbg1"]
+  description = "Define the location in which nodes will be deployed. (Must be in the same network zone.)"
 }
 
 variable "master_node_image" {
