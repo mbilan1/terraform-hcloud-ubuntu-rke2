@@ -6,6 +6,21 @@
 # Hetzner Cloud (hostPort ingress, single LB, cert-manager disabled).
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Cross-variable safety checks
+check "harmony_requires_cert_manager" {
+  assert {
+    condition     = !var.harmony.enabled || var.cluster_configuration.cert_manager.preinstall
+    error_message = "Harmony requires cert-manager CRDs. Set cluster_configuration.cert_manager.preinstall = true when harmony.enabled = true."
+  }
+}
+
+check "harmony_requires_workers_for_lb" {
+  assert {
+    condition     = !var.harmony.enabled || var.worker_node_count > 0
+    error_message = "Harmony routes HTTP/HTTPS through worker node targets on the ingress LB. Set worker_node_count >= 1 when harmony.enabled = true, or traffic will not reach ingress-nginx."
+  }
+}
+
 locals {
   harmony_infrastructure_values = {
     clusterDomain     = var.domain

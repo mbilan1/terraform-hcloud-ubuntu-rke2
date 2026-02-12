@@ -23,10 +23,16 @@ module "rke2" {
   preinstall_gateway_api_crds    = true
   domain                         = "hetznerdoesnot.work"
   expose_oidc_issuer_url         = true
+
+  # Security: restrict SSH and K8s API access in production
+  # ssh_allowed_cidrs    = ["YOUR_IP/32"] # Restrict SSH to your IP
+  # k8s_api_allowed_cidrs = ["YOUR_IP/32"] # Restrict API to your IP
+  enable_ssh_on_lb     = false
 }
 
-resource "local_file" "name" {
-  content  = module.rke2.kube_config
-  filename = "kubeconfig.yaml"
+resource "local_sensitive_file" "kubeconfig" {
+  content         = module.rke2.kube_config
+  filename        = "kubeconfig.yaml"
+  file_permission = "0600"
 }
 

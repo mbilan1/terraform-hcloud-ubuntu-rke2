@@ -23,26 +23,29 @@ resource "hcloud_firewall" "cluster" {
     ]
   }
 
-  # Allow SSH (consider restricting source_ips in production)
-  rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
-    source_ips = [
-      "0.0.0.0/0",
-      "::/0"
-    ]
+  # Allow SSH — restricted to ssh_allowed_cidrs.
+  # Uses dynamic block so the rule is omitted entirely when list is empty,
+  # rather than creating a rule with zero source_ips (which Hetzner rejects).
+  # Default is open (0.0.0.0/0) because provisioners SSH into master[0] —
+  # see variables.tf comment block for full rationale.
+  dynamic "rule" {
+    for_each = length(var.ssh_allowed_cidrs) > 0 ? [1] : []
+    content {
+      direction  = "in"
+      protocol   = "tcp"
+      port       = "22"
+      source_ips = var.ssh_allowed_cidrs
+    }
   }
 
-  # Allow Kubernetes API
+  # Allow Kubernetes API — restricted to k8s_api_allowed_cidrs.
+  # Unlike SSH, this is a static rule because the Kubernetes API must always
+  # be reachable (helm/kubernetes providers connect to it during apply).
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "6443"
-    source_ips = [
-      "0.0.0.0/0",
-      "::/0"
-    ]
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "6443"
+    source_ips = var.k8s_api_allowed_cidrs
   }
 
   # Allow RKE2 supervisor (node registration) — internal network only

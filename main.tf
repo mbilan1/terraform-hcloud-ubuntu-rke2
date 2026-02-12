@@ -55,7 +55,7 @@ resource "null_resource" "wait_for_cluster_ready" {
 
     connection {
       type        = "ssh"
-      host        = hcloud_load_balancer.management_lb.ipv4
+      host        = hcloud_server.master[0].ipv4_address
       user        = "root"
       private_key = tls_private_key.machines.private_key_openssh
       timeout     = "15m"
@@ -80,14 +80,15 @@ resource "hcloud_server" "master" {
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
   user_data = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
-    EXPOSE_METRICS       = var.cluster_configuration.monitoring_stack.preinstall || var.expose_kubernetes_metrics
-    RKE_TOKEN            = random_password.rke2_token.result
-    INITIAL_MASTER       = !local.cluster_loadbalancer_running
-    SERVER_ADDRESS       = hcloud_load_balancer.management_lb.ipv4
-    INSTALL_RKE2_VERSION = var.rke2_version
-    RKE2_CNI             = var.rke2_cni
-    OIDC_URL             = "https://${local.oidc_issuer_subdomain}"
-    DISABLE_INGRESS      = var.harmony.enabled
+    EXPOSE_METRICS            = var.cluster_configuration.monitoring_stack.preinstall || var.expose_kubernetes_metrics
+    RKE_TOKEN                 = random_password.rke2_token.result
+    INITIAL_MASTER            = !local.cluster_loadbalancer_running
+    SERVER_ADDRESS            = hcloud_load_balancer.control_plane.ipv4
+    INSTALL_RKE2_VERSION      = var.rke2_version
+    RKE2_CNI                  = var.rke2_cni
+    OIDC_URL                  = var.expose_oidc_issuer_url ? "https://${local.oidc_issuer_subdomain}" : ""
+    DISABLE_INGRESS           = var.harmony.enabled
+    ENABLE_SECRETS_ENCRYPTION = var.enable_secrets_encryption
   })
 
   network {
@@ -110,7 +111,7 @@ resource "hcloud_server" "master" {
 resource "hcloud_server" "additional_masters" {
   depends_on = [
     hcloud_network_subnet.main,
-    hcloud_load_balancer_service.management_lb_register_service,
+    hcloud_load_balancer_service.cp_register,
   ]
   count        = var.master_node_count > 1 ? var.master_node_count - 1 : 0
   name         = "${var.cluster_name}-master-${lower(random_string.master_node_suffix[count.index + 1].result)}"
@@ -120,14 +121,15 @@ resource "hcloud_server" "additional_masters" {
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
   user_data = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
-    EXPOSE_METRICS       = var.cluster_configuration.monitoring_stack.preinstall || var.expose_kubernetes_metrics
-    RKE_TOKEN            = random_password.rke2_token.result
-    INITIAL_MASTER       = false
-    SERVER_ADDRESS       = hcloud_load_balancer.management_lb.ipv4
-    INSTALL_RKE2_VERSION = var.rke2_version
-    RKE2_CNI             = var.rke2_cni
-    OIDC_URL             = "https://${local.oidc_issuer_subdomain}"
-    DISABLE_INGRESS      = var.harmony.enabled
+    EXPOSE_METRICS            = var.cluster_configuration.monitoring_stack.preinstall || var.expose_kubernetes_metrics
+    RKE_TOKEN                 = random_password.rke2_token.result
+    INITIAL_MASTER            = false
+    SERVER_ADDRESS            = hcloud_load_balancer.control_plane.ipv4
+    INSTALL_RKE2_VERSION      = var.rke2_version
+    RKE2_CNI                  = var.rke2_cni
+    OIDC_URL                  = var.expose_oidc_issuer_url ? "https://${local.oidc_issuer_subdomain}" : ""
+    DISABLE_INGRESS           = var.harmony.enabled
+    ENABLE_SECRETS_ENCRYPTION = var.enable_secrets_encryption
   })
 
   network {
@@ -154,7 +156,7 @@ resource "random_string" "worker_node_suffix" {
 resource "hcloud_server" "worker" {
   depends_on = [
     hcloud_network_subnet.main,
-    hcloud_load_balancer_service.management_lb_register_service,
+    hcloud_load_balancer_service.cp_register,
   ]
   count        = var.worker_node_count
   name         = "${var.cluster_name}-worker-${lower(random_string.worker_node_suffix[count.index].result)}"
@@ -165,7 +167,7 @@ resource "hcloud_server" "worker" {
   firewall_ids = [hcloud_firewall.cluster.id]
   user_data = templatefile("${path.module}/scripts/rke-worker.sh.tpl", {
     RKE_TOKEN            = random_password.rke2_token.result
-    SERVER_ADDRESS       = hcloud_load_balancer.management_lb.ipv4
+    SERVER_ADDRESS       = hcloud_load_balancer.control_plane.ipv4
     INSTALL_RKE2_VERSION = var.rke2_version
   })
 

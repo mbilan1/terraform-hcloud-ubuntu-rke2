@@ -33,7 +33,7 @@ spec:
           - "--mem-ballast-size-mib=683"
           - "--log-level=DEBUG"
         image: docker.io/otel/opentelemetry-collector-contrib@sha256:66be57ec77020da915ed2e66ef1954b129d27b075dbd531e6d5252fa5855a3ac
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: otel-collector
         securityContext:
           readOnlyRootFilesystem: true

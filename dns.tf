@@ -1,5 +1,8 @@
-locals {
-  ip_addresses = concat(hcloud_server.master[*].ipv4_address, hcloud_server.additional_masters[*].ipv4_address, hcloud_server.worker[*].ipv4_address)
+check "dns_requires_zone_id" {
+  assert {
+    condition     = !var.create_dns_record || var.route53_zone_id != ""
+    error_message = "route53_zone_id must be set when create_dns_record is true."
+  }
 }
 
 resource "aws_route53_record" "wildcard" {
@@ -9,5 +12,5 @@ resource "aws_route53_record" "wildcard" {
   type    = "A"
   ttl     = 300
 
-  records = local.ip_addresses
+  records = [hcloud_load_balancer.ingress[0].ipv4]
 }

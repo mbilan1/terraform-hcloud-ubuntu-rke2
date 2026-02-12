@@ -5,19 +5,19 @@ output "kube_config" {
 }
 
 output "cluster_ca" {
-  description = "The cluster CA certificate (base64 encoded)"
+  description = "The cluster CA certificate (PEM-encoded)"
   value       = local.cluster_ca
   sensitive   = true
 }
 
 output "client_cert" {
-  description = "The client certificate for cluster authentication (base64 encoded)"
+  description = "The client certificate for cluster authentication (PEM-encoded)"
   value       = local.client_cert
   sensitive   = true
 }
 
 output "client_key" {
-  description = "The client private key for cluster authentication (base64 encoded)"
+  description = "The client private key for cluster authentication (PEM-encoded)"
   value       = local.client_key
   sensitive   = true
 }
@@ -27,9 +27,14 @@ output "cluster_host" {
   value       = local.cluster_host
 }
 
-output "management_lb_ipv4" {
-  description = "The IPv4 address of the management load balancer"
-  value       = hcloud_load_balancer.management_lb.ipv4
+output "control_plane_lb_ipv4" {
+  description = "The IPv4 address of the control-plane load balancer (K8s API, registration)"
+  value       = hcloud_load_balancer.control_plane.ipv4
+}
+
+output "ingress_lb_ipv4" {
+  description = "The IPv4 address of the ingress load balancer (HTTP/HTTPS). Null when harmony is disabled."
+  value       = var.harmony.enabled ? hcloud_load_balancer.ingress[0].ipv4 : null
 }
 
 output "management_network_id" {

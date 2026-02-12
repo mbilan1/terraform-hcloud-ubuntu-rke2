@@ -1,8 +1,8 @@
 # Wait for RKE2 API server to become ready on master[0]
 resource "null_resource" "wait_for_api" {
   depends_on = [
-    hcloud_load_balancer_service.management_lb_k8s_service,
-    hcloud_load_balancer_service.management_lb_ssh_service,
+    hcloud_load_balancer_service.cp_k8s_api,
+    hcloud_server.master,
   ]
 
   provisioner "remote-exec" {
@@ -15,7 +15,7 @@ resource "null_resource" "wait_for_api" {
 
     connection {
       type        = "ssh"
-      host        = hcloud_load_balancer.management_lb.ipv4
+      host        = hcloud_server.master[0].ipv4_address
       user        = "root"
       private_key = tls_private_key.machines.private_key_openssh
       timeout     = "10m"
@@ -28,7 +28,7 @@ data "remote_file" "kubeconfig" {
     null_resource.wait_for_api
   ]
   conn {
-    host        = hcloud_load_balancer.management_lb.ipv4
+    host        = hcloud_server.master[0].ipv4_address
     user        = "root"
     private_key = tls_private_key.machines.private_key_openssh
     sudo        = true
@@ -38,6 +38,6 @@ data "remote_file" "kubeconfig" {
   path = "/etc/rancher/rke2/rke2.yaml"
 }
 
-data "hcloud_load_balancers" "rke2_management" {
-  with_selector = "rke2=management"
+data "hcloud_load_balancers" "rke2_control_plane" {
+  with_selector = "rke2=control-plane"
 }

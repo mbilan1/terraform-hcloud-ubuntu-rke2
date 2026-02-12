@@ -5,7 +5,7 @@ NODE_IP=""
 
 while [[ "$NODE_IP" = "" ]]
 do
-  NODE_IP=$(curl -s http://169.254.169.254/hetzner/v1/metadata/private-networks | grep "ip:" | cut -f 3 -d" " || true)
+  NODE_IP=$(curl -s --connect-timeout 5 http://169.254.169.254/hetzner/v1/metadata/private-networks | grep "ip:" | cut -f 3 -d" " || true)
   sleep 1
 done
 
@@ -22,6 +22,9 @@ tls-san:
 cloud-provider-name: external
 cni: ${RKE2_CNI}
 node-ip: $NODE_IP
+%{ if ENABLE_SECRETS_ENCRYPTION }
+secrets-encryption: true
+%{ endif }
 %{ if DISABLE_INGRESS }
 disable:
   - rke2-ingress-nginx
@@ -29,11 +32,11 @@ disable:
 %{ if EXPOSE_METRICS }
 etcd-expose-metrics: true
 kube-controller-manager-arg:
-  - "bind-address=0.0.0.0"
+  - "bind-address=$NODE_IP"
 kube-scheduler-arg:
-  - "bind-address=0.0.0.0"
+  - "bind-address=$NODE_IP"
 kube-proxy-arg:
-  - "bind-address=0.0.0.0"
+  - "metrics-bind-address=$NODE_IP"
 %{ endif }
 %{ if OIDC_URL != "" }
 kube-apiserver-arg:
