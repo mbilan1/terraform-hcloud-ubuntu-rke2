@@ -1,12 +1,25 @@
 <div align="center" width="100%">
     <h2>hcloud rke2 module</h2>
-    <p>Simple and fast creation of a rke2 Kubernetes cluster on Hetzner Cloud.</p>
+    <p>Enterprise-grade RKE2 Kubernetes cluster on Hetzner Cloud, purpose-built for Open edX deployments in Europe.</p>
     <a target="_blank" href="https://github.com/mbilan1/terraform-hcloud-rke2/releases"><img src="https://img.shields.io/github/v/release/mbilan1/terraform-hcloud-rke2?display_name=tag" /></a>
     <a target="_blank" href="https://github.com/mbilan1/terraform-hcloud-rke2/commits/main"><img src="https://img.shields.io/github/last-commit/mbilan1/terraform-hcloud-rke2" /></a>
 </div>
 
 > **This is a fork of [wenzel-felix/terraform-hcloud-rke2](https://github.com/wenzel-felix/terraform-hcloud-rke2).**
 > The original module is available on the [Terraform Registry](https://registry.terraform.io/modules/wenzel-felix/rke2/hcloud/latest).
+
+## 🎯 Mission
+
+The primary goal of this module is to provide an **enterprise-grade, cost-effective, and secure Kubernetes cluster** optimized for deploying [Open edX](https://openedx.org/) in Europe via [openedx-k8s-harmony](https://github.com/openedx/openedx-k8s-harmony).
+
+By running on **Hetzner Cloud** — a European infrastructure provider with data centers in Germany and Finland — this module supports **European digital sovereignty**: student data, course content, and platform operations stay within EU jurisdiction, fully compliant with GDPR and European data protection regulations.
+
+**Key principles:**
+- **Open edX-first** — every default, dependency version, and architectural decision is aligned with the Harmony chart and Tutor deployment workflow
+- **Affordable** — Hetzner Cloud offers some of the best price-to-performance ratios in Europe, making production-grade Open edX accessible to universities, NGOs, and small enterprises
+- **Fast** — a fully operational cluster with all prerequisites (ingress, cert-manager, CSI, monitoring, Harmony) deploys in under 15 minutes
+- **Secure** — hardened firewall rules, TLS everywhere via cert-manager + Let's Encrypt, OTel collector with least-privilege security context, sensitive outputs marked as such
+- **Sovereign** — EU-hosted infrastructure, no dependency on US hyperscalers for compute or storage
 
 ## Changes from upstream
 
