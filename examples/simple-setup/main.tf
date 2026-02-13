@@ -27,7 +27,7 @@ module "rke2" {
   # Security: restrict SSH and K8s API access in production
   # ssh_allowed_cidrs    = ["YOUR_IP/32"] # Restrict SSH to your IP
   # k8s_api_allowed_cidrs = ["YOUR_IP/32"] # Restrict API to your IP
-  enable_ssh_on_lb     = false
+  enable_ssh_on_lb = false
 }
 
 resource "local_sensitive_file" "kubeconfig" {
