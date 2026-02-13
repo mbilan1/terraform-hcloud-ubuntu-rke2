@@ -34,12 +34,15 @@ resource "helm_release" "istiod" {
 }
 
 data "http" "gateway_api" {
-  count = var.preinstall_gateway_api_crds ? 1 : 0
+  # Supply-chain/reproducibility toggle:
+  # keep current behavior by default, but allow operators to disable plan-time
+  # remote downloads for stricter/offline environments.
+  count = var.preinstall_gateway_api_crds && var.allow_remote_manifest_downloads ? 1 : 0
   url   = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/standard-install.yaml"
 }
 
 resource "kubectl_manifest" "gateway_api" {
   depends_on = [null_resource.wait_for_cluster_ready]
-  for_each   = var.preinstall_gateway_api_crds ? { for i in local.gateway_api_crds : index(local.gateway_api_crds, i) => i } : {}
+  for_each   = var.preinstall_gateway_api_crds && var.allow_remote_manifest_downloads ? { for i in local.gateway_api_crds : index(local.gateway_api_crds, i) => i } : {}
   yaml_body  = each.value
 }

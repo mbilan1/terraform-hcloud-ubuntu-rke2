@@ -1,5 +1,8 @@
 # 🇺🇦 terraform-hcloud-rke2
 
+[![Lint](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml)
+[![Security](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/security.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/security.yml)
+
 RKE2 Kubernetes cluster on Hetzner Cloud with Open edX (Harmony) integration.
 
 > [!WARNING]
@@ -207,6 +210,7 @@ tutor k8s launch
 | <a name="input_domain"></a> [domain](#input\_domain) | Domain for the cluster | `string` | n/a | yes |
 | <a name="input_hetzner_token"></a> [hetzner\_token](#input\_hetzner\_token) | Hetzner Cloud API Token | `string` | n/a | yes |
 | <a name="input_additional_lb_service_ports"></a> [additional\_lb\_service\_ports](#input\_additional\_lb\_service\_ports) | Additional TCP ports to expose on the management load balancer (e.g. [8080, 8443]). | `list(number)` | `[]` | no |
+| <a name="input_allow_remote_manifest_downloads"></a> [allow\_remote\_manifest\_downloads](#input\_allow\_remote\_manifest\_downloads) | Allow downloading external manifests from GitHub at plan/apply time (Gateway API, System Upgrade Controller). Disable for stricter reproducibility/offline workflows. | `bool` | `true` | no |
 | <a name="input_aws_access_key"></a> [aws\_access\_key](#input\_aws\_access\_key) | AWS access key for Route53 and cert-manager DNS-01 solver. If empty, uses default AWS credentials chain. | `string` | `""` | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region for the Route53 provider. | `string` | `"eu-central-1"` | no |
 | <a name="input_aws_secret_key"></a> [aws\_secret\_key](#input\_aws\_secret\_key) | AWS secret key for Route53 and cert-manager DNS-01 solver. If empty, uses default AWS credentials chain. | `string` | `""` | no |

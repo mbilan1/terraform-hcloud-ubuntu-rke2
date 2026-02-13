@@ -284,6 +284,12 @@ variable "preinstall_gateway_api_crds" {
   description = "Whether the gateway api crds should be preinstalled."
 }
 
+variable "allow_remote_manifest_downloads" {
+  type        = bool
+  default     = true
+  description = "Allow downloading external manifests from GitHub at plan/apply time (Gateway API, System Upgrade Controller). Disable for stricter reproducibility/offline workflows."
+}
+
 variable "gateway_api_version" {
   type        = string
   default     = "v0.7.1"

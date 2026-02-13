@@ -1,0 +1,52 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scanners:
+    name: IaC Security Scanners
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: .
+          additional_args: --minimum-severity HIGH
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          compact: true
+          quiet: true
+          soft_fail: false
+
+      - name: Run Trivy config scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+      - name: Run KICS scan
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "${PWD}:/path" \
+            checkmarx/kics:latest scan \
+            -p /path \
+            --exclude-paths "/path/.terraform,/path/.git" \
+            --fail-on high,critical
