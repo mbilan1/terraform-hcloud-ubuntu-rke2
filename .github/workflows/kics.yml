@@ -1,0 +1,30 @@
+name: KICS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  kics:
+    name: KICS scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run KICS scan
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "${PWD}:/path" \
+            checkmarx/kics:latest scan \
+            -p /path \
+            --exclude-paths "/path/.terraform,/path/.git,/path/examples/simple-setup" \
+            --exclude-queries "a88baa34-e2ad-44ea-ad6f-8cac87bc7c71" \
+            --fail-on high,critical

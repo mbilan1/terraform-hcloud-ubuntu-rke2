@@ -1,0 +1,30 @@
+name: tfsec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tfsec:
+    name: tfsec scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        # tfsec parser may fail on newer Terraform/OpenTofu constructs
+        # (e.g. top-level check blocks). Keep this as best-effort signal.
+        continue-on-error: true
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: .
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          soft_fail: true
+          additional_args: --minimum-severity HIGH --ignore-hcl-errors

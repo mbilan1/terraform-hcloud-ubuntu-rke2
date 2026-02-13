@@ -1,7 +1,11 @@
 # 🇺🇦 terraform-hcloud-rke2
 
-[![Lint](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml)
-[![Security](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/security.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/security.yml)
+[![Lint (OpenTofu fmt/validate + TFLint)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint.yml)
+[![tfsec](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/tfsec.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/tfsec.yml)
+[![Checkov](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/checkov.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/checkov.yml)
+[![KICS](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/kics.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/kics.yml)
+
+Lint workflow includes: `tofu fmt -check -recursive`, `tofu validate -no-color`, and `tflint`.
 
 RKE2 Kubernetes cluster on Hetzner Cloud with Open edX (Harmony) integration.
 
@@ -25,6 +29,9 @@ Key capabilities:
 
 > [!NOTE]
 > Monitoring ingress hosts (`grafana.<domain>`, `prometheus.<domain>`) are disabled by default. Set `expose_monitoring_ingress = true` to publish them.
+
+> [!NOTE]
+> The module allows full `tofu destroy` (including primary control-plane node). In production, protect this operationally with code review, environment protections, and targeted plans/applies.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions and trade-offs.
 
