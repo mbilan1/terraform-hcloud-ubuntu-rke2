@@ -44,7 +44,13 @@ resource "helm_release" "loki" {
 resource "kubernetes_ingress_v1" "monitoring_ingress" {
   depends_on = [kubernetes_namespace_v1.monitoring]
 
-  count = var.cluster_configuration.monitoring_stack.preinstall ? 1 : 0
+  # Security/usability compromise:
+  # - Monitoring stack installation and monitoring UI exposure are decoupled.
+  # - Public ingress is explicit opt-in because Prometheus/Grafana endpoints are
+  #   high-value reconnaissance targets when exposed without external auth gateway.
+  # Alternative considered: always create ingress when monitoring is enabled.
+  # Rejected to keep safer defaults while preserving optional public access for labs.
+  count = var.cluster_configuration.monitoring_stack.preinstall && var.expose_monitoring_ingress ? 1 : 0
   metadata {
     name      = "monitoring-ingress"
     namespace = "monitoring"

@@ -64,7 +64,7 @@ block-beta
 |-----------|---------|
 | **Security Baseline** | Encryption at rest, TLS automation, private networking, and explicit firewall controls are enabled by default. Production hardening is still required (CIDR restriction, bastion/VPN, policy layers). |
 | **Operator Efficiency** | The recommended topology is designed for single-command bootstrap with sensible defaults. Non-standard combinations are supported, but may require explicit configuration. |
-| **Cost-Effective EU Hosting** | The reference architecture targets low-cost operation in EU regions (~€38/mo for a non-default HA configuration: 3×cx22 masters + 3×cx22 workers + 2×lb11, including IPv4 costs). The default deployment (1 master, 0 workers) costs ~€10–15/mo. Workloads remain portable at the Kubernetes layer. |
+| **Cost-Effective EU Hosting** | The default topology targets pragmatic HA in EU regions (~€38/mo for 3×cx22 masters + 3×cx22 workers + 2×lb11, including IPv4 costs). Actual monthly total depends on IPv4, storage volumes, and traffic. Workloads remain portable at the Kubernetes layer. |
 | **Open edX Compatibility** | Defaults align with Open edX ecosystem conventions (ClusterIssuer naming, ingress behavior, cert-manager expectations) while keeping the module usable outside Open edX. |
 | **Resilience (HA Scope)** | Automated node reboots and Kubernetes upgrade workflows are available for HA clusters. Backup/DR and incident response remain operator responsibilities. |
 | **Incremental Hardening** | Improvements are delivered in verifiable steps. Trade-offs are documented in the Compromise Log, and planned controls are explicitly marked as planned. |
@@ -94,7 +94,7 @@ The primary constraint is Hetzner Cloud platform limitations and the balance bet
 │                                                 │
 │   Ubuntu 24.04 LTS (Hetzner ISO)               │
 │   + RKE2 (Rancher Kubernetes Engine v2)         │
-│   + openedx-k8s-harmony (default on)            │
+│   + openedx-k8s-harmony (opt-in)                │
 │                                                 │
 │   Can operate independently of Open edX,        │
 │   but is adopted for and oriented toward it.    │
@@ -107,9 +107,9 @@ The **openedx-k8s-harmony** chart integration is the module's primary adoption t
 
 This module was originally forked from [wenzel-felix/terraform-hcloud-rke2](https://github.com/wenzel-felix/terraform-hcloud-rke2) — the only proven working solution combining Hetzner Cloud + Ubuntu + RKE2 at the time. The architecture and idea were sound; this fork focuses on production hardening, clearer guardrails, and Open edX alignment, with enterprise controls still evolving.
 
-> **⚠️ First deploy warning**: The module’s defaults are not production-ready out of the box:
-> - `master_node_count = 1`, `worker_node_count = 0` — single-node dev cluster, no workers
-> - `harmony.enabled = true` with 0 workers creates an ingress LB with no targets
+> **⚠️ First deploy warning**: The module still needs production hardening after bootstrap:
+> - defaults create `master_node_count = 3`, `worker_node_count = 3` (HA baseline)
+> - `harmony.enabled = false` by default — enable Harmony explicitly for Open edX
 > - `ssh_allowed_cidrs` and `k8s_api_allowed_cidrs` default to `0.0.0.0/0` (open to the internet)
 >
 > A production-ready minimum: 3 masters, 3+ workers, restricted CIDRs.
@@ -196,7 +196,7 @@ flowchart TB
 - **Dual load balancer** architecture — control plane and ingress traffic are isolated (see [Dual LB Architecture](#dual-load-balancer-architecture)).
 - **Private network** for all inter-node communication (etcd, kubelet, pod traffic via CNI overlay).
 - **DNS via AWS Route53** — wildcard `*.domain` record pointing to the ingress LB. This is a temporary solution and will be replaced with a more sovereignty-aligned DNS provider in a future iteration.
-- **⚠️ DNS depends on Harmony** — `create_dns_record = true` references the ingress LB, which only exists when `harmony.enabled = true`. Setting `create_dns_record = true` with `harmony.enabled = false` will crash at plan time.
+- **⚠️ DNS depends on Harmony** — `create_dns_record = true` points DNS to the ingress LB, which exists only when `harmony.enabled = true`. The module now enforces this with an explicit preflight `check`.
 - **No egress filtering** — all outbound traffic from nodes is unrestricted (Hetzner default). Egress firewall rules are not currently implemented.
 
 ---
@@ -253,8 +253,8 @@ flowchart TB
 | **Hetzner CCM** | Cloud controller (node lifecycle, LB integration) | Yes | Shared `hcloud` secret with CSI |
 | **Hetzner CSI** | Persistent volumes (`hcloud-volumes` StorageClass) | Yes | Required for Open edX PVCs (MySQL, Mongo, etc.) |
 | **cert-manager** | TLS certificate automation | Yes | ClusterIssuer name matches Harmony convention |
-| **Harmony** | Open edX Kubernetes orchestration | Default on | `harmony.enabled` defaults to `true`. Disables RKE2 built-in ingress, deploys its own. Set `harmony.enabled = false` for non-Open edX use. |
-| **kube-prometheus-stack** | Monitoring (Prometheus + Grafana) | Opt-in | ⚠️ When enabled, Grafana and Prometheus ingresses are **publicly exposed** at `grafana.<domain>` and `prometheus.<domain>` with **no auth gateway** — only Grafana's built-in login. Restrict via NetworkPolicy or disable ingress in production. |
+| **Harmony** | Open edX Kubernetes orchestration | Opt-in | `harmony.enabled` defaults to `false`. When enabled, it disables RKE2 built-in ingress and deploys Harmony ingress-nginx. |
+| **kube-prometheus-stack** | Monitoring (Prometheus + Grafana) | Opt-in | By default, monitoring ingresses are **not exposed**. Public hosts (`grafana.<domain>`, `prometheus.<domain>`) are created only when `expose_monitoring_ingress = true`. |
 | **Loki** | Log aggregation | Opt-in | Deployed with monitoring stack |
 | **Istio + Tempo + OTel** | Service mesh + distributed tracing | Opt-in | Full observability pipeline |
 | **Kured** | Automatic node reboot after OS updates | HA only | Skipped on single-master clusters |
@@ -380,7 +380,7 @@ flowchart LR
 | OIDC federation | Exposed OIDC issuer endpoint (opt-in) | ✅ Implemented |
 | OTel security context | runAsNonRoot, readOnly, drop ALL caps, seccomp | ✅ Implemented |
 
-> **⚠️ ModSecurity WAF limitation**: The `enable_nginx_modsecurity_waf` variable only takes effect when `harmony.enabled = false` (non-default). When Harmony is enabled, it deploys its own ingress-nginx without ModSecurity configuration. This is a known gap.
+> **⚠️ ModSecurity WAF limitation**: The `enable_nginx_modsecurity_waf` variable only takes effect when `harmony.enabled = false` (default). When Harmony is enabled, it deploys its own ingress-nginx without ModSecurity configuration. This is a known gap.
 >
 > **⚠️ OIDC security note**: Enabling `expose_oidc_issuer_url` sets `anonymous-auth=true` on the API server to allow OIDC discovery. This is required by the OIDC spec but widens the attack surface. Evaluate this trade-off before enabling.
 
@@ -404,7 +404,7 @@ The module's Terraform code, Helm charts, and Kubernetes manifests should be con
 ### Operational Limitations
 
 - **SSH private key is not exposed as a module output.** To SSH into nodes for debugging, extract the key from Terraform state (`tls_private_key.machines.private_key_openssh`) or enable `generate_ssh_key_file = true` to write it to disk. Adding `ssh_private_key` as a sensitive output is planned.
-- **Kubeconfig is fetched before all nodes are ready** — the `data.remote_file.kubeconfig` depends on `wait_for_api`, not `wait_for_cluster_ready`. Helm releases may begin deploying before workers have joined. In practice this is self-healing (Helm waits for pod scheduling), but initial applies may show transient errors.
+- **Longer first apply for safer addon sequencing** — `data.remote_file.kubeconfig` now depends on `wait_for_cluster_ready` to avoid early addon races while workers are still joining. This improves determinism at the cost of slower initial provisioning.
 
 ---
 
@@ -523,11 +523,11 @@ The module contains many deliberate compromises. Each is documented in code comm
 | Providers inside module | Composability vs simplicity | Prevents provider aliasing and multi-account patterns. Provider extraction is planned as a breaking change. |
 | Route53 for DNS | EU sovereignty vs maturity | Cloudflare was removed for sovereignty reasons. Route53 is a temporary solution — will be replaced with a more aligned provider. |
 | `data.http` for CRD downloads | Reproducibility vs simplicity | Manifests downloaded from GitHub at plan time. Vendoring into repo is planned. |
-| `harmony.enabled` default `true` | Convention vs safety | Harmony currently defaults to `true` (module is Open edX-first), but `worker_node_count` defaults to `0` — creating a warning on first apply. Changing default to `false` (opt-in) is planned. |
-| master-0 replacement race | Bootstrap vs lifecycle | `INITIAL_MASTER` flag is set at server create-time via `user_data` and never re-evaluated (`ignore_changes = [user_data]`). If master-0 is tainted/replaced after initial deploy, the LB already exists so the new server gets `INITIAL_MASTER=false` and tries to join a cluster that no longer has a leader. Manual intervention required. |
-| Monitoring public exposure | Usability vs security | When monitoring stack is enabled, Grafana and Prometheus ingresses are created at `grafana.<domain>` and `prometheus.<domain>` with no auth gateway. Prometheus is fully open. Grafana uses only its built-in auth (default credentials from chart). |
-| ModSecurity + Harmony gap | Integration vs complexity | `enable_nginx_modsecurity_waf` has no effect when `harmony.enabled = true` (default). Harmony deploys its own ingress-nginx without ModSecurity support. |
-| DNS requires Harmony | Simplicity vs composability | `create_dns_record = true` references `ingress[0]` which only exists when `harmony.enabled = true`. Setting DNS without Harmony causes a plan-time crash. |
+| `harmony.enabled` default `false` | Convention vs safety | Harmony remains opt-in by default so the module can serve both generic Kubernetes and Open edX use cases. Open edX deployments must enable it explicitly. |
+| master-0 replacement race | Bootstrap vs lifecycle | `INITIAL_MASTER` flag is set at server create-time via `user_data` and never re-evaluated (`ignore_changes = [user_data]`). A lifecycle guardrail now blocks destroy/replacement of `master-0` by default (`prevent_destroy = true`). Controlled replacement requires intentional code-level override during maintenance. |
+| Monitoring public exposure | Usability vs security | Monitoring ingresses are now disabled by default. If `expose_monitoring_ingress = true`, Grafana and Prometheus are exposed at `grafana.<domain>` and `prometheus.<domain>` without an external auth gateway. |
+| ModSecurity + Harmony gap | Integration vs complexity | `enable_nginx_modsecurity_waf` has no effect when `harmony.enabled = true` (opt-in). Harmony deploys its own ingress-nginx without ModSecurity support. |
+| DNS requires Harmony | Simplicity vs composability | `create_dns_record = true` targets the ingress LB, so `harmony.enabled = true` is required. This is now guarded by an explicit preflight `check` with a clear error. |
 | RKE2 version unpinned | Freshness vs reproducibility | RKE2 is installed from the `stable` channel without version pinning. Different applies at different times may produce clusters with different K8s versions. |
 | GitHub downloads at plan time | Simplicity vs reliability | System Upgrade Controller CRDs and Gateway API CRDs are downloaded from GitHub via `data.http` at `tofu plan`. If GitHub is unreachable, plan fails. Vendoring is planned. |
 

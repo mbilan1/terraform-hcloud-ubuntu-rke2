@@ -25,7 +25,14 @@ resource "null_resource" "wait_for_api" {
 
 data "remote_file" "kubeconfig" {
   depends_on = [
-    null_resource.wait_for_api
+    # Reliability compromise (chosen): fetch kubeconfig only after full node readiness,
+    # not just API readiness, to reduce early Helm/Kubernetes provider race conditions
+    # on first apply.
+    #
+    # Alternative considered: keep depends_on = [null_resource.wait_for_api] for faster
+    # addon start. Rejected because it can trigger transient failures while workers are
+    # still joining, which is noisier for operators and CI.
+    null_resource.wait_for_cluster_ready
   ]
   conn {
     host        = hcloud_server.master[0].ipv4_address

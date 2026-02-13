@@ -20,6 +20,9 @@ Key capabilities:
 - Optional: monitoring (Prometheus + Grafana + Loki), service mesh (Istio), tracing (Tempo + OTel)
 - Self-maintenance: Kured + System Upgrade Controller (HA clusters only)
 
+> [!NOTE]
+> Monitoring ingress hosts (`grafana.<domain>`, `prometheus.<domain>`) are disabled by default. Set `expose_monitoring_ingress = true` to publish them.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions and trade-offs.
 
 ## Prerequisites
@@ -37,6 +40,8 @@ module "rke2" {
   source        = "git::https://github.com/mbilan1/terraform-hcloud-rke2.git?ref=bac8aef"
   hetzner_token = var.hetzner_token
   domain        = "example.com"
+  master_node_count = 1
+  worker_node_count = 0
 }
 ```
 
@@ -47,6 +52,7 @@ module "rke2" {
   source            = "git::https://github.com/mbilan1/terraform-hcloud-rke2.git?ref=bac8aef"
   hetzner_token     = var.hetzner_token
   domain            = "example.com"
+  harmony           = { enabled = true }
   master_node_count = 3
   worker_node_count = 3
   create_dns_record = true
@@ -75,7 +81,7 @@ kubectl get nodes
 
 ## Open edX with Harmony
 
-When `harmony.enabled = true` (default), the module deploys the [openedx-k8s-harmony](https://github.com/openedx/openedx-k8s-harmony) chart with infrastructure-aligned defaults:
+When `harmony.enabled = true`, the module deploys the [openedx-k8s-harmony](https://github.com/openedx/openedx-k8s-harmony) chart with infrastructure-aligned defaults:
 
 | Component | Source | Harmony override |
 |-----------|--------|:---:|
@@ -208,20 +214,21 @@ tutor k8s launch
 | <a name="input_cluster_issuer_name"></a> [cluster\_issuer\_name](#input\_cluster\_issuer\_name) | Name of the cert-manager ClusterIssuer. Defaults to 'harmony-letsencrypt-global' for compatibility with openedx-k8s-harmony Tutor plugin (hardcoded in k8s-services patch). | `string` | `"harmony-letsencrypt-global"` | no |
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Short name for the cluster, used as prefix for all resources (servers, LB, network, firewall). | `string` | `"rke2"` | no |
 | <a name="input_create_dns_record"></a> [create\_dns\_record](#input\_create\_dns\_record) | Defines whether a Route53 DNS record should be created for the cluster load balancer. | `bool` | `false` | no |
-| <a name="input_enable_auto_kubernetes_updates"></a> [enable\_auto\_kubernetes\_updates](#input\_enable\_auto\_kubernetes\_updates) | Whether the kubernetes version should be updated automatically. | `bool` | `true` | no |
-| <a name="input_enable_auto_os_updates"></a> [enable\_auto\_os\_updates](#input\_enable\_auto\_os\_updates) | Whether the OS should be updated automatically. | `bool` | `true` | no |
+| <a name="input_enable_auto_kubernetes_updates"></a> [enable\_auto\_kubernetes\_updates](#input\_enable\_auto\_kubernetes\_updates) | Whether the kubernetes version should be updated automatically. | `bool` | `false` | no |
+| <a name="input_enable_auto_os_updates"></a> [enable\_auto\_os\_updates](#input\_enable\_auto\_os\_updates) | Whether the OS should be updated automatically. | `bool` | `false` | no |
 | <a name="input_enable_nginx_modsecurity_waf"></a> [enable\_nginx\_modsecurity\_waf](#input\_enable\_nginx\_modsecurity\_waf) | Defines whether the nginx modsecurity waf should be enabled. | `bool` | `false` | no |
 | <a name="input_enable_secrets_encryption"></a> [enable\_secrets\_encryption](#input\_enable\_secrets\_encryption) | Enable Kubernetes Secrets encryption at rest in etcd. Strongly recommended for production. | `bool` | `true` | no |
 | <a name="input_enable_ssh_on_lb"></a> [enable\_ssh\_on\_lb](#input\_enable\_ssh\_on\_lb) | Expose SSH (port 22) via the management load balancer. Disabled by default for security. Enable only for debugging or when bastion access is unavailable. | `bool` | `false` | no |
 | <a name="input_expose_kubernetes_metrics"></a> [expose\_kubernetes\_metrics](#input\_expose\_kubernetes\_metrics) | Defines whether the kubernetes metrics (scheduler, etcd, ...) should be exposed on the nodes. | `bool` | `false` | no |
+| <a name="input_expose_monitoring_ingress"></a> [expose\_monitoring\_ingress](#input\_expose\_monitoring\_ingress) | Expose Grafana and Prometheus via public Ingress hosts when monitoring stack is enabled. Disabled by default for security. | `bool` | `false` | no |
 | <a name="input_expose_oidc_issuer_url"></a> [expose\_oidc\_issuer\_url](#input\_expose\_oidc\_issuer\_url) | Expose the OIDC discovery endpoint via Ingress at oidc.<domain>. Enables anonymous-auth and custom service-account-issuer on the API server. | `bool` | `false` | no |
 | <a name="input_gateway_api_version"></a> [gateway\_api\_version](#input\_gateway\_api\_version) | The version of the gateway api to install. | `string` | `"v0.7.1"` | no |
 | <a name="input_generate_ssh_key_file"></a> [generate\_ssh\_key\_file](#input\_generate\_ssh\_key\_file) | Defines whether the generated ssh key should be stored as local file. | `bool` | `false` | no |
-| <a name="input_harmony"></a> [harmony](#input\_harmony) | Harmony chart (openedx-k8s-harmony) integration.<br/>- enabled: Deploy Harmony chart via Helm. Disables RKE2 built-in ingress-nginx and routes HTTP/HTTPS through the management LB.<br/>- version: Chart version to install. Empty string means latest.<br/>- extra\_values: Additional values.yaml content (list of YAML strings) merged after infrastructure defaults. | <pre>object({<br/>    enabled      = optional(bool, true)<br/>    version      = optional(string, "")<br/>    extra_values = optional(list(string), [])<br/>  })</pre> | `{}` | no |
+| <a name="input_harmony"></a> [harmony](#input\_harmony) | Harmony chart (openedx-k8s-harmony) integration.<br/>- enabled: Deploy Harmony chart via Helm. Disables RKE2 built-in ingress-nginx and routes HTTP/HTTPS through the management LB.<br/>- version: Chart version to install. Empty string means latest.<br/>- extra\_values: Additional values.yaml content (list of YAML strings) merged after infrastructure defaults. | <pre>object({<br/>    enabled      = optional(bool, false)<br/>    version      = optional(string, "")<br/>    extra_values = optional(list(string), [])<br/>  })</pre> | `{}` | no |
 | <a name="input_k8s_api_allowed_cidrs"></a> [k8s\_api\_allowed\_cidrs](#input\_k8s\_api\_allowed\_cidrs) | CIDR blocks allowed to access the Kubernetes API (port 6443). Defaults to open for module usability; restrict in production. | `list(string)` | <pre>[<br/>  "0.0.0.0/0",<br/>  "::/0"<br/>]</pre> | no |
 | <a name="input_lb_location"></a> [lb\_location](#input\_lb\_location) | Define the location for the management cluster loadbalancer. | `string` | `"hel1"` | no |
 | <a name="input_letsencrypt_issuer"></a> [letsencrypt\_issuer](#input\_letsencrypt\_issuer) | The email to send notifications regarding let's encrypt. | `string` | `""` | no |
-| <a name="input_master_node_count"></a> [master\_node\_count](#input\_master\_node\_count) | Number of master (control-plane) nodes. Use 1 for non-HA or >= 3 for HA (etcd quorum). | `number` | `1` | no |
+| <a name="input_master_node_count"></a> [master\_node\_count](#input\_master\_node\_count) | Number of master (control-plane) nodes. Use 1 for non-HA or >= 3 for HA (etcd quorum). | `number` | `3` | no |
 | <a name="input_master_node_image"></a> [master\_node\_image](#input\_master\_node\_image) | Define the image for the master nodes. | `string` | `"ubuntu-24.04"` | no |
 | <a name="input_master_node_server_type"></a> [master\_node\_server\_type](#input\_master\_node\_server\_type) | Hetzner Cloud server type for control-plane nodes (e.g. 'cx22', 'cx32', 'cx42'). | `string` | `"cx23"` | no |
 | <a name="input_network_address"></a> [network\_address](#input\_network\_address) | Define the network for the cluster in CIDR format (e.g., '10.0.0.0/16'). | `string` | `"10.0.0.0/16"` | no |
@@ -234,7 +241,7 @@ tutor k8s launch
 | <a name="input_route53_zone_id"></a> [route53\_zone\_id](#input\_route53\_zone\_id) | The Route53 hosted zone ID. (Required if create\_dns\_record is true.) | `string` | `""` | no |
 | <a name="input_ssh_allowed_cidrs"></a> [ssh\_allowed\_cidrs](#input\_ssh\_allowed\_cidrs) | CIDR blocks allowed to access SSH (port 22) on cluster nodes. Defaults to open because the module's provisioners require SSH to master[0]. Restrict to your runner/bastion CIDR in production (e.g. ['1.2.3.4/32']). | `list(string)` | <pre>[<br/>  "0.0.0.0/0",<br/>  "::/0"<br/>]</pre> | no |
 | <a name="input_subnet_address"></a> [subnet\_address](#input\_subnet\_address) | Define the subnet for cluster nodes in CIDR format. Must be within network\_address range. | `string` | `"10.0.1.0/24"` | no |
-| <a name="input_worker_node_count"></a> [worker\_node\_count](#input\_worker\_node\_count) | Number of dedicated worker nodes. Set to 0 to schedule workloads on control-plane nodes. | `number` | `0` | no |
+| <a name="input_worker_node_count"></a> [worker\_node\_count](#input\_worker\_node\_count) | Number of dedicated worker nodes. Set to 0 to schedule workloads on control-plane nodes. | `number` | `3` | no |
 | <a name="input_worker_node_image"></a> [worker\_node\_image](#input\_worker\_node\_image) | Define the image for the worker nodes. | `string` | `"ubuntu-24.04"` | no |
 | <a name="input_worker_node_server_type"></a> [worker\_node\_server\_type](#input\_worker\_node\_server\_type) | Hetzner Cloud server type for worker nodes (e.g. 'cx22', 'cx32', 'cx42'). | `string` | `"cx23"` | no |
 ### Outputs

@@ -16,7 +16,7 @@ variable "domain" {
 
 variable "master_node_count" {
   type        = number
-  default     = 1
+  default     = 3
   description = "Number of master (control-plane) nodes. Use 1 for non-HA or >= 3 for HA (etcd quorum)."
 
   validation {
@@ -27,7 +27,7 @@ variable "master_node_count" {
 
 variable "worker_node_count" {
   type        = number
-  default     = 0
+  default     = 3
   description = "Number of dedicated worker nodes. Set to 0 to schedule workloads on control-plane nodes."
 }
 
@@ -92,12 +92,31 @@ variable "network_address" {
   type        = string
   default     = "10.0.0.0/16"
   description = "Define the network for the cluster in CIDR format (e.g., '10.0.0.0/16')."
+
+  # Why strict CIDR validation here:
+  # - Prevents provider/runtime failures later in the graph with less obvious errors.
+  # - Fails early at input-validation stage with a clear message.
+  # Alternative considered: rely on Hetzner provider validation only.
+  # Rejected because errors appear later and are harder to map to user input.
+  validation {
+    condition     = can(cidrnetmask(var.network_address))
+    error_message = "network_address must be a valid CIDR block (e.g. 10.0.0.0/16)."
+  }
 }
 
 variable "subnet_address" {
   type        = string
   default     = "10.0.1.0/24"
   description = "Define the subnet for cluster nodes in CIDR format. Must be within network_address range."
+
+  # Same rationale as network_address: fail fast on malformed CIDR values.
+  # This is intentionally syntax-level validation only; semantic relationship
+  # (subnet inside network range) should be handled via a dedicated cross-variable
+  # check to keep each validation focused and understandable.
+  validation {
+    condition     = can(cidrnetmask(var.subnet_address))
+    error_message = "subnet_address must be a valid CIDR block (e.g. 10.0.1.0/24)."
+  }
 }
 
 variable "node_locations" {
@@ -191,6 +210,12 @@ variable "expose_kubernetes_metrics" {
   description = "Defines whether the kubernetes metrics (scheduler, etcd, ...) should be exposed on the nodes."
 }
 
+variable "expose_monitoring_ingress" {
+  type        = bool
+  default     = false
+  description = "Expose Grafana and Prometheus via public Ingress hosts when monitoring stack is enabled. Disabled by default for security."
+}
+
 variable "create_dns_record" {
   type        = bool
   default     = false
@@ -243,13 +268,13 @@ variable "nginx_ingress_proxy_body_size" {
 
 variable "enable_auto_os_updates" {
   type        = bool
-  default     = true
+  default     = false
   description = "Whether the OS should be updated automatically."
 }
 
 variable "enable_auto_kubernetes_updates" {
   type        = bool
-  default     = true
+  default     = false
   description = "Whether the kubernetes version should be updated automatically."
 }
 
@@ -267,7 +292,7 @@ variable "gateway_api_version" {
 
 variable "harmony" {
   type = object({
-    enabled      = optional(bool, true)
+    enabled      = optional(bool, false)
     version      = optional(string, "")
     extra_values = optional(list(string), [])
   })
@@ -314,12 +339,43 @@ variable "ssh_allowed_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0", "::/0"]
   description = "CIDR blocks allowed to access SSH (port 22) on cluster nodes. Defaults to open because the module's provisioners require SSH to master[0]. Restrict to your runner/bastion CIDR in production (e.g. ['1.2.3.4/32'])."
+
+  # Compromise rationale:
+  # - We keep open defaults for bootstrap usability (documented module trade-off),
+  #   but still validate syntax to avoid silent misconfiguration.
+  # Alternative considered: force non-empty private CIDRs by default.
+  # Rejected for now because it breaks "first apply" flow for many users and CI runners.
+  validation {
+    # Use cidrsubnet(..., 0, 0) as a parse-only check that works for both
+    # IPv4 and IPv6 CIDRs (including broad ranges like 0.0.0.0/0 and ::/0).
+    condition     = alltrue([for c in var.ssh_allowed_cidrs : can(cidrsubnet(c, 0, 0))])
+    error_message = "All ssh_allowed_cidrs entries must be valid CIDR blocks."
+  }
 }
 
 variable "k8s_api_allowed_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0", "::/0"]
   description = "CIDR blocks allowed to access the Kubernetes API (port 6443). Defaults to open for module usability; restrict in production."
+
+  # Why require at least one CIDR:
+  # - Kubernetes/Helm providers need API reachability during apply.
+  # - Empty list frequently leads to self-inflicted lockout and broken applies.
+  # Alternative considered: allow empty list for strict lockdown scenarios.
+  # Rejected at module level; strict lockdown should be done after bootstrap with
+  # explicit operator controls (VPN/bastion) to avoid accidental dead-end states.
+  validation {
+    condition     = length(var.k8s_api_allowed_cidrs) > 0
+    error_message = "k8s_api_allowed_cidrs must contain at least one CIDR block."
+  }
+
+  # Keep syntax validation even with permissive defaults, so user-provided values
+  # fail early and predictably.
+  validation {
+    # Same parser-level validation as above: supports both IPv4 and IPv6 CIDRs.
+    condition     = alltrue([for c in var.k8s_api_allowed_cidrs : can(cidrsubnet(c, 0, 0))])
+    error_message = "All k8s_api_allowed_cidrs entries must be valid CIDR blocks."
+  }
 }
 
 variable "enable_ssh_on_lb" {

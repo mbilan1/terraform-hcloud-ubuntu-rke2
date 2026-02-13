@@ -97,6 +97,17 @@ resource "hcloud_server" "master" {
   }
 
   lifecycle {
+    # Lifecycle guardrail:
+    # - master-0 replacement is a known high-risk path in this module's bootstrap model
+    #   (INITIAL_MASTER/user_data semantics + existing LB state can lead to broken joins).
+    # - We therefore block destroy/replacement of master-0 by default.
+    #
+    # Alternative considered: make this switchable via variable.
+    # Rejected by Terraform constraints: lifecycle.prevent_destroy does not accept
+    # variables. We keep a hard guardrail (`true`) and require explicit code change
+    # for controlled replacement operations.
+    prevent_destroy = true
+
     ignore_changes = [
       user_data,
       image,
