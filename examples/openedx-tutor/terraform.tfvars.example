@@ -1,0 +1,16 @@
+# ── Hetzner Cloud ─────────────────────────────────────────────
+hcloud_token = "YOUR_HETZNER_TOKEN"
+
+# ── AWS / Route53 DNS ─────────────────────────────────────────
+aws_access_key = "AKIAIOSFODNN7EXAMPLE"
+aws_secret_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+aws_region     = "eu-central-1"
+
+# ── DNS ───────────────────────────────────────────────────────
+route53_zone_name   = "example.com"
+route53_record_name = "openedx"           # → openedx.example.com
+domain              = "openedx.example.com"
+
+# ── Optional ──────────────────────────────────────────────────
+cluster_name      = "openedx"
+letsencrypt_email = "admin@example.com"
