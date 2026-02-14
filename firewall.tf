@@ -3,9 +3,10 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow HTTP
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
+    description = "Ingress, external: HTTP web traffic to ingress controller (workers)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "80"
     source_ips = [
       "0.0.0.0/0",
       "::/0"
@@ -14,9 +15,10 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow HTTPS
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
+    description = "Ingress, external: HTTPS/TLS web traffic to ingress controller (workers)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "443"
     source_ips = [
       "0.0.0.0/0",
       "::/0"
@@ -31,10 +33,11 @@ resource "hcloud_firewall" "cluster" {
   dynamic "rule" {
     for_each = length(var.ssh_allowed_cidrs) > 0 ? [1] : []
     content {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "22"
-      source_ips = var.ssh_allowed_cidrs
+      description = "Ingress, external: SSH remote access (restricted by ssh_allowed_cidrs)"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "22"
+      source_ips  = var.ssh_allowed_cidrs
     }
   }
 
@@ -42,17 +45,19 @@ resource "hcloud_firewall" "cluster" {
   # Unlike SSH, this is a static rule because the Kubernetes API must always
   # be reachable (helm/kubernetes providers connect to it during apply).
   rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "6443"
-    source_ips = var.k8s_api_allowed_cidrs
+    description = "Ingress, external: Kubernetes API for kubectl and Terraform providers (restricted by k8s_api_allowed_cidrs)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "6443"
+    source_ips  = var.k8s_api_allowed_cidrs
   }
 
   # Allow RKE2 supervisor (node registration) — internal network only
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "9345"
+    description = "Ingress, internal: RKE2 supervisor for node registration and cluster join"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "9345"
     source_ips = [
       var.network_address
     ]
@@ -60,9 +65,10 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow etcd — internal network only
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "2379-2380"
+    description = "Ingress, internal: etcd peer and client traffic between masters"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "2379-2380"
     source_ips = [
       var.network_address
     ]
@@ -70,9 +76,10 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow kubelet API — internal network only
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "10250"
+    description = "Ingress, internal: kubelet API for pod logs, exec, and metrics"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "10250"
     source_ips = [
       var.network_address
     ]
@@ -80,9 +87,10 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow NodePort range — internal network only
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "30000-32767"
+    description = "Ingress, internal: NodePort range for LB health checks and service routing"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "30000-32767"
     source_ips = [
       var.network_address
     ]
@@ -90,8 +98,9 @@ resource "hcloud_firewall" "cluster" {
 
   # Allow ICMP (ping)
   rule {
-    direction = "in"
-    protocol  = "icmp"
+    description = "Ingress, external: ICMP ping for diagnostics and LB health probes"
+    direction   = "in"
+    protocol    = "icmp"
     source_ips = [
       "0.0.0.0/0",
       "::/0"
