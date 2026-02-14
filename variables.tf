@@ -155,19 +155,6 @@ variable "cluster_configuration" {
       version    = optional(string, "1.19.0")
       preinstall = optional(bool, true)
     }), {})
-    monitoring_stack = optional(object({
-      kube_prom_stack_version = optional(string, "81.0.1")
-      loki_stack_version      = optional(string, "2.9.10")
-      preinstall              = optional(bool, false)
-    }), {})
-    istio_service_mesh = optional(object({
-      version    = optional(string, "1.18.0")
-      preinstall = optional(bool, false)
-    }), {})
-    tracing_stack = optional(object({
-      tempo_version = optional(string, "1.3.1")
-      preinstall    = optional(bool, false)
-    }), {})
     hcloud_csi = optional(object({
       version               = optional(string, "2.12.0")
       preinstall            = optional(bool, true)
@@ -191,29 +178,12 @@ variable "cluster_configuration" {
     condition     = contains(["Delete", "Retain"], var.cluster_configuration.hcloud_csi.reclaim_policy)
     error_message = "hcloud_csi.reclaim_policy must be either 'Delete' or 'Retain'."
   }
-
-  validation {
-    condition     = (var.cluster_configuration.monitoring_stack.preinstall == true && var.cluster_configuration.istio_service_mesh.preinstall == true) || var.cluster_configuration.tracing_stack.preinstall == false
-    error_message = "The tracing stack can only be installed if the monitoring stack and the istio service mesh are installed."
-  }
 }
 
 variable "enable_nginx_modsecurity_waf" {
   type        = bool
   default     = false
   description = "Defines whether the nginx modsecurity waf should be enabled."
-}
-
-variable "expose_kubernetes_metrics" {
-  type        = bool
-  default     = false
-  description = "Defines whether the kubernetes metrics (scheduler, etcd, ...) should be exposed on the nodes."
-}
-
-variable "expose_monitoring_ingress" {
-  type        = bool
-  default     = false
-  description = "Expose Grafana and Prometheus via public Ingress hosts when monitoring stack is enabled. Disabled by default for security."
 }
 
 variable "create_dns_record" {
@@ -278,22 +248,10 @@ variable "enable_auto_kubernetes_updates" {
   description = "Whether the kubernetes version should be updated automatically."
 }
 
-variable "preinstall_gateway_api_crds" {
-  type        = bool
-  default     = false
-  description = "Whether the gateway api crds should be preinstalled."
-}
-
 variable "allow_remote_manifest_downloads" {
   type        = bool
   default     = true
-  description = "Allow downloading external manifests from GitHub at plan/apply time (Gateway API, System Upgrade Controller). Disable for stricter reproducibility/offline workflows."
-}
-
-variable "gateway_api_version" {
-  type        = string
-  default     = "v0.7.1"
-  description = "The version of the gateway api to install."
+  description = "Allow downloading external manifests from GitHub at plan/apply time (System Upgrade Controller). Disable for stricter reproducibility/offline workflows."
 }
 
 variable "harmony" {
@@ -309,12 +267,6 @@ variable "harmony" {
     - version: Chart version to install. Empty string means latest.
     - extra_values: Additional values.yaml content (list of YAML strings) merged after infrastructure defaults.
   EOT
-}
-
-variable "expose_oidc_issuer_url" {
-  type        = bool
-  default     = false
-  description = "Expose the OIDC discovery endpoint via Ingress at oidc.<domain>. Enables anonymous-auth and custom service-account-issuer on the API server."
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

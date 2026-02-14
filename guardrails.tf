@@ -31,14 +31,6 @@ check "letsencrypt_email_required_when_issuer_enabled" {
   }
 }
 
-check "gateway_api_version_format" {
-  assert {
-    # Expecting tags like v0.7.1 used in GitHub release URL construction.
-    condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", var.gateway_api_version))
-    error_message = "gateway_api_version must follow semantic tag format like v0.7.1."
-  }
-}
-
 check "system_upgrade_controller_version_format" {
   assert {
     # Variable stores numeric semver (e.g. 0.13.4), URL template prefixes it with 'v'.
@@ -54,13 +46,11 @@ check "remote_manifest_downloads_required_for_selected_features" {
     # - Operators can explicitly disable remote downloads for controlled/offline
     #   environments, but then features that currently depend on GitHub-hosted
     #   manifests must be turned off.
-    # Alternative considered: hard-disable remote downloads by default.
-    # Rejected for now to avoid sudden feature regressions for existing users.
     condition = (
       var.allow_remote_manifest_downloads ||
-      (!var.preinstall_gateway_api_crds && !var.enable_auto_kubernetes_updates)
+      !var.enable_auto_kubernetes_updates
     )
-    error_message = "allow_remote_manifest_downloads=false requires preinstall_gateway_api_crds=false and enable_auto_kubernetes_updates=false (these features currently rely on remote GitHub manifests)."
+    error_message = "allow_remote_manifest_downloads=false requires enable_auto_kubernetes_updates=false (this feature currently relies on remote GitHub manifests)."
   }
 }
 

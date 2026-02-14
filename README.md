@@ -24,11 +24,7 @@ Key capabilities:
 - Dual load balancer architecture (control plane + ingress)
 - cert-manager with Let's Encrypt (DNS-01 via Route53)
 - Hetzner CCM + CSI for cloud integration
-- Optional: monitoring (Prometheus + Grafana + Loki), service mesh (Istio), tracing (Tempo + OTel)
 - Self-maintenance: Kured + System Upgrade Controller (HA clusters only)
-
-> [!NOTE]
-> Monitoring ingress hosts (`grafana.<domain>`, `prometheus.<domain>`) are disabled by default. Set `expose_monitoring_ingress = true` to publish them.
 
 > [!NOTE]
 > The module allows full `tofu destroy` (including primary control-plane node). In production, protect this operationally with code review, environment protections, and targeted plans/applies.

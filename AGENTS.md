@@ -201,20 +201,15 @@ Actual deployments that **use** this module live in `examples/` or in separate r
 | `cluster-certmanager.tf` | cert-manager + ClusterIssuer (Let's Encrypt) | Yes |
 | `cluster-harmony.tf` | openedx-k8s-harmony chart + ingress-nginx | Opt-in (`harmony.enabled`) |
 | `cluster-ingresscontroller.tf` | RKE2 built-in ingress (when Harmony disabled) | Conditional |
-| `cluster-monitoring.tf` | kube-prometheus-stack + Loki + Grafana | Opt-in |
-| `cluster-servicemesh.tf` | Istio service mesh | Opt-in |
-| `cluster-tracing.tf` | Tempo + OTel collector | Opt-in |
 | `cluster-selfmaintenance.tf` | Kured + System Upgrade Controller | HA only (≥3 masters) |
-| `cluster-oidcconfig.tf` | OIDC issuer endpoint exposure | Opt-in |
 
 ### Other Directories
 
 | Path | Purpose |
 |------|---------|
 | `scripts/` | cloud-init shell templates (`rke-master.sh.tpl`, `rke-worker.sh.tpl`) |
-| `templates/manifests/` | Raw Kubernetes YAML manifests (OTel, System Upgrade Controller) |
+| `templates/manifests/` | Raw Kubernetes YAML manifests (System Upgrade Controller) |
 | `templates/values/` | Helm chart values files |
-| `templates/misc/` | Grafana dashboard JSON |
 | `docs/` | Architecture docs — **READ `ARCHITECTURE.md` BEFORE ANY WORK** |
 | `examples/` | Example deployments (`simple-setup/`, `openedx-tutor/`, `rancher-setup/`) |
 
@@ -227,7 +222,7 @@ Addons deploy **sequentially** after cluster readiness:
 ```
 Infrastructure → master-0 → additional masters → workers
     → wait_for_api → wait_for_cluster_ready
-    → fetch kubeconfig → HCCM → CSI → cert-manager → Harmony → monitoring
+    → fetch kubeconfig → HCCM → CSI → cert-manager → Harmony
 ```
 
 **Do NOT reorder** addon deployments — they have provider/resource dependencies.

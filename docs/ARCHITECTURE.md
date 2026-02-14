@@ -222,18 +222,6 @@ flowchart TB
             nginx["ingress-nginx\nDaemonSet + hostPort"]
         end
 
-        subgraph monitoring["monitoring (optional)"]
-            prom["kube-prometheus-stack"]
-            loki["Loki"]
-            grafana["Grafana"]
-        end
-
-        subgraph istio_ns["istio-system (optional)"]
-            istiod["Istiod"]
-            tempo["Tempo"]
-            otel["OTel Collector"]
-        end
-
         subgraph maintenance["Self-Maintenance (HA only)"]
             kured["Kured\n(auto-reboot)"]
             suc["System Upgrade Controller\n(K8s version upgrades)"]
@@ -243,9 +231,6 @@ flowchart TB
     cm --> issuer
     harmony --> nginx
     harmony --> cm
-    prom --> grafana
-    otel --> tempo
-    istiod -.-> otel
 ```
 
 | Component | Role | Always Installed | Notes |
@@ -254,9 +239,6 @@ flowchart TB
 | **Hetzner CSI** | Persistent volumes (`hcloud-volumes` StorageClass) | Yes | Required for Open edX PVCs (MySQL, Mongo, etc.) |
 | **cert-manager** | TLS certificate automation | Yes | ClusterIssuer name matches Harmony convention |
 | **Harmony** | Open edX Kubernetes orchestration | Opt-in | `harmony.enabled` defaults to `false`. When enabled, it disables RKE2 built-in ingress and deploys Harmony ingress-nginx. |
-| **kube-prometheus-stack** | Monitoring (Prometheus + Grafana) | Opt-in | By default, monitoring ingresses are **not exposed**. Public hosts (`grafana.<domain>`, `prometheus.<domain>`) are created only when `expose_monitoring_ingress = true`. |
-| **Loki** | Log aggregation | Opt-in | Deployed with monitoring stack |
-| **Istio + Tempo + OTel** | Service mesh + distributed tracing | Opt-in | Full observability pipeline |
 | **Kured** | Automatic node reboot after OS updates | HA only | Skipped on single-master clusters |
 | **System Upgrade Controller** | Automated K8s version upgrades | HA only | Follows `stable` channel |
 
@@ -296,9 +278,7 @@ flowchart LR
         hccm2["HCCM + CSI"]
         cm2["cert-manager\n+ ClusterIssuer"]
         harm2["Harmony Chart\n(ingress-nginx)"]
-        mon["Monitoring\n(optional)"]
         kubeconfig --> hccm2 --> cm2 --> harm2
-        cm2 --> mon
     end
 
     phase1 --> phase2 --> phase3
@@ -326,7 +306,6 @@ flowchart LR
 12. **HCCM + CSI** — cloud integration (node labeling, persistent volumes)
 13. **cert-manager** — TLS automation with Let's Encrypt ClusterIssuer
 14. **Harmony** — Open edX platform chart with infrastructure-specific values
-15. **Monitoring / Tracing** — optional observability stack
 
 ---
 
@@ -338,7 +317,7 @@ flowchart LR
         direction TB
         L1["Layer 1: Infrastructure\nHetzner Firewall\nSSH key auth (RSA 4096)\nPrivate network isolation"]
         L2["Layer 2: Kubernetes\nRBAC · Pod Security Standards\nSecrets encryption at rest\nNetwork Policies"]
-        L3["Layer 3: Application\ncert-manager TLS everywhere\nModSecurity WAF (Harmony-off only)\nOIDC identity federation"]
+        L3["Layer 3: Application\ncert-manager TLS everywhere\nModSecurity WAF (Harmony-off only)"]
         L4["Layer 4: Operations\nSAST / IaC security scanning\nAudit logging\nAutomated OS patching (Kured)"]
         L1 --> L2 --> L3 --> L4
     end
@@ -377,12 +356,8 @@ flowchart LR
 |---------|---------------|--------|
 | TLS everywhere | cert-manager + Let's Encrypt ClusterIssuer | ✅ Implemented |
 | ModSecurity WAF | nginx ingress annotation (opt-in) | 🟡 Only when Harmony disabled |
-| OIDC federation | Exposed OIDC issuer endpoint (opt-in) | ✅ Implemented |
-| OTel security context | runAsNonRoot, readOnly, drop ALL caps, seccomp | ✅ Implemented |
 
 > **⚠️ ModSecurity WAF limitation**: The `enable_nginx_modsecurity_waf` variable only takes effect when `harmony.enabled = false` (default). When Harmony is enabled, it deploys its own ingress-nginx without ModSecurity configuration. This is a known gap.
->
-> **⚠️ OIDC security note**: Enabling `expose_oidc_issuer_url` sets `anonymous-auth=true` on the API server to allow OIDC discovery. This is required by the OIDC spec but widens the attack surface. Evaluate this trade-off before enabling.
 
 ### Layer 4: Operations
 
@@ -525,11 +500,10 @@ The module contains many deliberate compromises. Each is documented in code comm
 | `data.http` for CRD downloads | Reproducibility vs simplicity | Manifests are downloaded from GitHub at plan time by default. Operators can disable this path via `allow_remote_manifest_downloads = false` (requires disabling dependent features) for stricter/offline workflows. Vendoring into repo remains planned. |
 | `harmony.enabled` default `false` | Convention vs safety | Harmony remains opt-in by default so the module can serve both generic Kubernetes and Open edX use cases. Open edX deployments must enable it explicitly. |
 | master-0 replacement race | Bootstrap vs lifecycle | `INITIAL_MASTER` flag is set at server create-time via `user_data` and never re-evaluated (`ignore_changes = [user_data]`). A lifecycle guardrail now blocks destroy/replacement of `master-0` by default (`prevent_destroy = true`). Controlled replacement requires intentional code-level override during maintenance. |
-| Monitoring public exposure | Usability vs security | Monitoring ingresses are now disabled by default. If `expose_monitoring_ingress = true`, Grafana and Prometheus are exposed at `grafana.<domain>` and `prometheus.<domain>` without an external auth gateway. |
 | ModSecurity + Harmony gap | Integration vs complexity | `enable_nginx_modsecurity_waf` has no effect when `harmony.enabled = true` (opt-in). Harmony deploys its own ingress-nginx without ModSecurity support. |
 | DNS requires Harmony | Simplicity vs composability | `create_dns_record = true` targets the ingress LB, so `harmony.enabled = true` is required. This is now guarded by an explicit preflight `check` with a clear error. |
 | RKE2 version unpinned | Freshness vs reproducibility | RKE2 is installed from the `stable` channel without version pinning. Different applies at different times may produce clusters with different K8s versions. |
-| GitHub downloads at plan time | Simplicity vs reliability | System Upgrade Controller CRDs and Gateway API CRDs are downloaded from GitHub via `data.http` at `tofu plan`. If GitHub is unreachable, plan fails. Vendoring is planned. |
+| GitHub downloads at plan time | Simplicity vs reliability | System Upgrade Controller CRDs are downloaded from GitHub via `data.http` at `tofu plan`. If GitHub is unreachable, plan fails. Vendoring is planned. |
 
 ---
 
@@ -543,15 +517,12 @@ The path from current state to enterprise-grade, grouped by priority:
 - [ ] Split firewall per node role (master / worker)
 - [ ] CIDR validation on all network variables
 - [ ] Add ACME staging option for development
-- [ ] Monitoring ingress opt-in (no public exposure by default)
 - [ ] Vendor external manifests (remove `data.http` from GitHub)
 
 ### Mid-term
 
-- [ ] OTel collector → Helm chart (replace raw YAML manifests)
 - [ ] Proxy protocol on ingress LB (real client IP visibility)
 - [ ] Add `moved` blocks for safe resource renames
-- [ ] Update all component versions (Istio, Gateway API, Tempo, OTel)
 - [ ] Add `.tftest.hcl` unit tests
 - [ ] GitHub Actions CI pipeline (fmt, validate, lint, security scan, test)
 - [ ] Add `ssh_private_key` and additional outputs

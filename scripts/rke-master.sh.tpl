@@ -29,22 +29,6 @@ secrets-encryption: true
 disable:
   - rke2-ingress-nginx
 %{ endif }
-%{ if EXPOSE_METRICS }
-etcd-expose-metrics: true
-kube-controller-manager-arg:
-  - "bind-address=$NODE_IP"
-kube-scheduler-arg:
-  - "bind-address=$NODE_IP"
-kube-proxy-arg:
-  - "metrics-bind-address=$NODE_IP"
-%{ endif }
-%{ if OIDC_URL != "" }
-kube-apiserver-arg:
-  - anonymous-auth=true
-  - api-audiences=${OIDC_URL},https://kubernetes.default.svc.cluster.local,rke2
-  - service-account-issuer=${OIDC_URL}
-  - service-account-jwks-uri=${OIDC_URL}/openid/v1/jwks
-%{ endif }
 EOF
 
 sudo curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION="${INSTALL_RKE2_VERSION}" sh -
