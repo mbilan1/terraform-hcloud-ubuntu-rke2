@@ -33,6 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
+        with:
+          # SECURITY: Disable wrapper to prevent tofu stdout/stderr from being
+          # written to GITHUB_OUTPUT file on disk (could persist sensitive data).
+          tofu_wrapper: false
 
       - name: Init
         run: tofu init -backend=false -input=false

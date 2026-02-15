@@ -79,7 +79,11 @@ resource "hcloud_server" "master" {
   location     = element(var.node_locations, 0)
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
-  user_data = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
+  # SECURITY: user_data contains RKE2 join token (random_password.rke2_token).
+  # Hetzner provider does NOT mark user_data as sensitive, so without sensitive()
+  # the entire cloud-init script (with plaintext token) would appear in plan/apply
+  # output and CI logs. Wrapping with sensitive() forces OpenTofu to redact it.
+  user_data = sensitive(templatefile("${path.module}/scripts/rke-master.sh.tpl", {
     RKE_TOKEN                 = random_password.rke2_token.result
     INITIAL_MASTER            = !local.cluster_loadbalancer_running
     SERVER_ADDRESS            = hcloud_load_balancer.control_plane.ipv4
@@ -87,7 +91,7 @@ resource "hcloud_server" "master" {
     RKE2_CNI                  = var.rke2_cni
     DISABLE_INGRESS           = var.harmony.enabled
     ENABLE_SECRETS_ENCRYPTION = var.enable_secrets_encryption
-  })
+  }))
 
   network {
     network_id = hcloud_network.main.id
@@ -125,7 +129,8 @@ resource "hcloud_server" "additional_masters" {
   location     = element(var.node_locations, count.index + 1)
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
-  user_data = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
+  # SECURITY: user_data contains RKE2 join token — see master[0] comment.
+  user_data = sensitive(templatefile("${path.module}/scripts/rke-master.sh.tpl", {
     RKE_TOKEN                 = random_password.rke2_token.result
     INITIAL_MASTER            = false
     SERVER_ADDRESS            = hcloud_load_balancer.control_plane.ipv4
@@ -133,7 +138,7 @@ resource "hcloud_server" "additional_masters" {
     RKE2_CNI                  = var.rke2_cni
     DISABLE_INGRESS           = var.harmony.enabled
     ENABLE_SECRETS_ENCRYPTION = var.enable_secrets_encryption
-  })
+  }))
 
   network {
     network_id = hcloud_network.main.id
@@ -168,11 +173,12 @@ resource "hcloud_server" "worker" {
   location     = element(var.node_locations, count.index)
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
-  user_data = templatefile("${path.module}/scripts/rke-worker.sh.tpl", {
+  # SECURITY: user_data contains RKE2 join token — see master[0] comment.
+  user_data = sensitive(templatefile("${path.module}/scripts/rke-worker.sh.tpl", {
     RKE_TOKEN            = random_password.rke2_token.result
     SERVER_ADDRESS       = hcloud_load_balancer.control_plane.ipv4
     INSTALL_RKE2_VERSION = var.rke2_version
-  })
+  }))
 
   network {
     network_id = hcloud_network.main.id
