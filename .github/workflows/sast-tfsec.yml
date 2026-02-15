@@ -24,13 +24,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Run tfsec
         # tfsec parser may fail on newer Terraform/OpenTofu constructs
         # (e.g. top-level check blocks). Keep this as best-effort signal.
         continue-on-error: true
-        uses: aquasecurity/tfsec-action@v1.0.3
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           working_directory: .
           github_token: ${{ secrets.GITHUB_TOKEN }}

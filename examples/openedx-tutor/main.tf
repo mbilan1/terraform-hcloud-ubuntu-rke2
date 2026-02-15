@@ -73,6 +73,11 @@ module "rke2" {
 # Route53 DNS
 # ──────────────────────────────────────────────────────────────────────────────
 
+# DECISION: Using Terraform Registry source with exact version pin instead of git+commit hash
+# Why: Registry modules with exact version pins are immutable (registry prevents version overwrites).
+#      Git URL with commit hash would lose submodule resolution and registry signature verification.
+#      CKV_TF_1 is designed for git-sourced modules where tags can be moved.
+#checkov:skip=CKV_TF_1:Registry module pinned to exact version 6.1.1 — immutable via registry
 module "route53" {
   source  = "terraform-aws-modules/route53/aws"
   version = "6.1.1"
