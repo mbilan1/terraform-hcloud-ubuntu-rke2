@@ -1,0 +1,21 @@
+# Badge: Unit: variables
+name: "Unit: variables"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  variables:
+    name: tofu test (variables)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - run: tofu init -backend=false
+      - run: tofu test -filter=tests/variables.tftest.hcl -no-color

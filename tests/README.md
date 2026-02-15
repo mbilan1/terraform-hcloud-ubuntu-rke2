@@ -69,14 +69,15 @@ All tests run **offline** with mocked providers — no cloud credentials, no inf
 
 | File | Tests | Scope |
 |------|:-----:|-------|
-| `variables_and_guardrails.tftest.hcl` | 39 | Variable validations (10 blocks) + cross-variable guardrails (8 of 10 check blocks) |
+| `variables.tftest.hcl` | 23 | Variable validations — every `validation {}` block tested with positive + negative cases |
+| `guardrails.tftest.hcl` | 16 | Cross-variable guardrails — every `check {}` block tested (8 of 10 directly; 2 DNS untestable) |
 | `conditional_logic.tftest.hcl` | 22 | Resource count assertions for all conditional branches (harmony, masters, workers, LB, SSH, cert-manager, HCCM, CSI, kured) |
 | `examples.tftest.hcl` | 2 | Full-stack configuration patterns (minimal, OpenEdX-Tutor) |
 | **Total** | **63** | |
 
 > **Note:** 2 DNS check blocks (`dns_requires_zone_id`, `dns_requires_harmony_ingress`) cannot be tested
 > with mock providers — the downstream `aws_route53_record` triggers uncatchable provider schema  
-> errors. See the comment in `variables_and_guardrails.tftest.hcl` for details.
+> errors. See the comment in `guardrails.tftest.hcl` for details.
 
 ## Architecture
 
@@ -174,25 +175,18 @@ Tests that example configurations in `examples/` produce valid plans.
 
 Each CI command/tool has its own workflow file and badge in the root README (one badge = one tool):
 
-```
-┌─────────────┐ ┌──────────────┐ ┌─────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────────┐
-│ lint-fmt.yml │ │lint-validate │ │lint-tflint  │ │ checkov.yml│ │  kics.yml  │ │ tfsec.yml  │ │ unit-tests.yml   │
-│ Gate 0a      │ │   .yml       │ │   .yml      │ │  Gate 0b   │ │  Gate 0b   │ │  Gate 0b   │ │  Gate 1-3        │
-│ tofu fmt     │ │ tofu validate│ │  tflint     │ │  IaC CIS   │ │  Checkmarx │ │  Security  │ │  tofu test       │
-│              │ │              │ │             │ │  policies  │ │  scanner   │ │  best-effort│ │  63 tests, ~3s   │
-└─────────────┘ └──────────────┘ └─────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────────────┘
-      🟢               🟢              🟢              🟢              🟢              🟡                 🟢
-```
-
 | Badge label | File | Gate | Blocking |
 |-------------|------|:----:|:--------:|
 | Lint: fmt | `lint-fmt.yml` | 0a | Yes |
 | Lint: validate | `lint-validate.yml` | 0a | Yes |
 | Lint: tflint | `lint-tflint.yml` | 0a | Yes |
-| SAST: Checkov | `checkov.yml` | 0b | Yes |
-| SAST: KICS | `kics.yml` | 0b | Yes |
-| SAST: tfsec | `tfsec.yml` | 0b | No (best-effort) |
-| Unit: tofu test | `unit-tests.yml` | 1-3 | Yes |
+| SAST: Checkov | `sast-checkov.yml` | 0b | Yes |
+| SAST: KICS | `sast-kics.yml` | 0b | Yes |
+| SAST: tfsec | `sast-tfsec.yml` | 0b | No (best-effort) |
+| Unit: variables | `unit-variables.yml` | 1 | Yes |
+| Unit: guardrails | `unit-guardrails.yml` | 1 | Yes |
+| Unit: conditionals | `unit-conditionals.yml` | 1 | Yes |
+| Unit: examples | `unit-examples.yml` | 1 | Yes |
 
 All workflows trigger on push to `main` and on pull requests to `main`.
 

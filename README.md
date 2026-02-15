@@ -1,16 +1,20 @@
 # 🇺🇦 terraform-hcloud-rke2
 
-<!-- Quality Gate Badges — one badge per CI command/tool -->
+**Quality Gate Results:**
+
 <!-- Lint -->
 [![Lint: fmt](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-fmt.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-fmt.yml)
 [![Lint: validate](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-validate.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-validate.yml)
 [![Lint: tflint](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-tflint.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/lint-tflint.yml)
 <!-- SAST -->
-[![SAST: Checkov](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/checkov.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/checkov.yml)
-[![SAST: KICS](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/kics.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/kics.yml)
-[![SAST: tfsec](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/tfsec.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/tfsec.yml)
-<!-- Unit Tests -->
-[![Unit: tofu test](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-tests.yml)
+[![SAST: Checkov](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-checkov.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-checkov.yml)
+[![SAST: KICS](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-kics.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-kics.yml)
+[![SAST: tfsec](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-tfsec.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/sast-tfsec.yml)
+<!-- Unit -->
+[![Unit: variables](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-variables.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-variables.yml)
+[![Unit: guardrails](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-guardrails.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-guardrails.yml)
+[![Unit: conditionals](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-conditionals.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-conditionals.yml)
+[![Unit: examples](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-examples.yml/badge.svg)](https://github.com/mbilan1/terraform-hcloud-rke2/actions/workflows/unit-examples.yml)
 
 RKE2 Kubernetes cluster on Hetzner Cloud with Open edX (Harmony) integration.
 

@@ -1,0 +1,21 @@
+# Badge: Unit: examples
+name: "Unit: examples"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  examples:
+    name: tofu test (examples)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - run: tofu init -backend=false
+      - run: tofu test -filter=tests/examples.tftest.hcl -no-color

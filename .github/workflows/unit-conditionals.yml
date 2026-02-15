@@ -1,0 +1,21 @@
+# Badge: Unit: conditionals
+name: "Unit: conditionals"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conditionals:
+    name: tofu test (conditional logic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - run: tofu init -backend=false
+      - run: tofu test -filter=tests/conditional_logic.tftest.hcl -no-color
