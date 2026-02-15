@@ -73,9 +73,19 @@ jobs:
       - name: Apply
         run: tofu apply -auto-approve -input=false -no-color
 
-      - name: Smoke (check outputs)
-        # NOTE: Minimal smoke — avoids needing kubectl on the runner.
-        run: tofu output -no-color control_plane_lb_ipv4
+      - name: Smoke (kubectl get nodes)
+        # DECISION: Use kubectl against the real cluster to validate that:
+        # - cloud-init finished
+        # - RKE2 API is reachable
+        # - at least the control-plane node joined successfully
+        # Why: Output-only smoke can pass even when the cluster is not functional.
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y kubernetes-client
+
+          # SECURITY: Do not print kubeconfig to logs.
+          tofu output -raw kube_config > kubeconfig.yaml
+          kubectl --kubeconfig kubeconfig.yaml get nodes -o wide
 
       - name: Destroy (always)
         if: always()
@@ -89,4 +99,5 @@ jobs:
         run: |
           find . -name 'terraform.tfstate*' -exec shred -vfzu {} + 2>/dev/null || true
           find . -name '*.tfplan' -exec shred -vfzu {} + 2>/dev/null || true
+          find . -name 'kubeconfig.yaml' -exec shred -vfzu {} + 2>/dev/null || true
           rm -rf .terraform/ 2>/dev/null || true
