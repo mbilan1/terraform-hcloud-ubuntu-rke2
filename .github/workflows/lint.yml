@@ -53,11 +53,13 @@ jobs:
       - name: Init (no backend)
         run: tofu init -backend=false
 
-      - name: Run tofu test when test files exist
+      - name: Run OpenTofu Tests
         shell: bash
         run: |
-          if compgen -G "*.tftest.hcl" > /dev/null; then
+          # tofu test auto-discovers .tftest.hcl in root and tests/ directory.
+          # Guard checks both locations to avoid silent skip.
+          if compgen -G "*.tftest.hcl" > /dev/null || compgen -G "tests/*.tftest.hcl" > /dev/null; then
             tofu test
           else
-            echo "No .tftest.hcl files found, skipping tofu test."
+            echo "No .tftest.hcl files found in root or tests/, skipping."
           fi
