@@ -1,5 +1,10 @@
 # 🇺🇦 terraform-hcloud-rke2
 
+![OpenTofu](https://img.shields.io/badge/OpenTofu-%3E%3D%201.5.0-blue?logo=opentofu)
+![RKE2](https://img.shields.io/badge/RKE2-stable-blue?logo=rancher)
+![Helm](https://img.shields.io/badge/Helm-%3E%3D%202.11-blue?logo=helm)
+![GitHub Release](https://img.shields.io/github/v/release/mbilan1/terraform-hcloud-rke2?include_prereleases&label=Release)
+
 **Quality Gate Results:**
 
 <!-- Lint -->
@@ -282,6 +287,38 @@ tutor k8s launch
 | <a name="output_management_network_id"></a> [management\_network\_id](#output\_management\_network\_id) | The ID of the Hetzner Cloud private network |
 | <a name="output_management_network_name"></a> [management\_network\_name](#output\_management\_network\_name) | The name of the Hetzner Cloud private network |
 <!-- END_TF_DOCS -->
+
+## Quality Gate Pipeline
+
+The CI pipeline implements a **layered quality gate** model — each layer catches progressively deeper issues:
+
+```
+Gate 0 ─ Static Analysis     fmt · validate · tflint · Checkov · KICS · tfsec
+Gate 1 ─ Unit Tests           variables · guardrails · conditionals · examples
+Gate 2 ─ Integration          tofu plan against real providers (requires secrets)
+Gate 3 ─ E2E                  tofu apply + smoke tests + destroy (manual only)
+```
+
+### Workflow Architecture
+
+Every tool runs in its own GitHub Actions workflow file with its own badge:
+
+| Gate | Category | Workflows | Trigger | Blocking |
+|:----:|----------|-----------|---------|:--------:|
+| 0a | Lint | `lint-fmt.yml`, `lint-validate.yml`, `lint-tflint.yml` | push + PR | Yes |
+| 0b | SAST | `sast-checkov.yml`, `sast-kics.yml`, `sast-tfsec.yml` | push + PR | Checkov/KICS: Yes, tfsec: best-effort |
+| 1 | Unit | `unit-variables.yml`, `unit-guardrails.yml`, `unit-conditionals.yml`, `unit-examples.yml` | push + PR | Yes |
+| 2 | Integration | `integration-plan.yml` | PR + manual | No (requires cloud secrets) |
+| 3 | E2E | `e2e-apply.yml` | Manual only | No (requires cost confirmation) |
+
+### Execution Details
+
+- **Gate 0–1** run on every push to `main` and every PR — fully offline, zero cost, ~30s total
+- **Gate 2** runs `tofu plan` in `examples/minimal/` with real Hetzner + AWS credentials; skipped when `HAS_CLOUD_CREDENTIALS` repo variable is not `true`
+- **Gate 3** provisions real infrastructure (`tofu apply`), runs smoke tests (`kubectl get nodes`), then cleans up (`tofu destroy`); requires manual dispatch with cost confirmation checkbox
+- **63 unit tests** use `tofu test` with `mock_provider` — no cloud credentials needed
+
+See [tests/README.md](tests/README.md) for detailed test strategy, coverage traceability, and mock provider workarounds.
 
 ## Architecture
 

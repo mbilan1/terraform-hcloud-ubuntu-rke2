@@ -53,9 +53,10 @@ An **OpenTofu/Terraform module** (NOT a root deployment) that deploys a producti
 1. **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** before any structural change
 2. **Run `tofu validate`** after any `.tf` file change to verify syntax
 3. **Run `tofu fmt -check`** to verify formatting (or `tofu fmt` to auto-fix)
-4. **Preserve existing code comments** — they document deliberate compromises
-5. **Read the relevant file before editing** — understand the dependency chain
-6. **Verify external claims via network** before suggesting or making changes (see [Verification Rules](#verification-rules-mandatory))
+4. **Run `tofu test`** after any change to variables, guardrails, or conditional logic (63 tests, ~3s, $0)
+5. **Preserve existing code comments** — they document deliberate compromises
+6. **Read the relevant file before editing** — understand the dependency chain
+7. **Verify external claims via network** before suggesting or making changes (see [Verification Rules](#verification-rules-mandatory))
 
 ### Where to run what
 
@@ -63,6 +64,7 @@ An **OpenTofu/Terraform module** (NOT a root deployment) that deploys a producti
 |---------|:-:|:-:|
 | `tofu validate` | ✅ Safe | ✅ Safe |
 | `tofu fmt` | ✅ Safe | ✅ Safe |
+| `tofu test` | ✅ Safe (uses mock_provider) | N/A |
 | `tofu plan` | ❌ **Forbidden** | ✅ With credentials |
 | `tofu apply` | ❌ **Forbidden** | ⚠️ Only with explicit user approval |
 | `tofu destroy` | ❌ **Forbidden** | ⚠️ Only with explicit user approval |
@@ -70,6 +72,8 @@ An **OpenTofu/Terraform module** (NOT a root deployment) that deploys a producti
 ### Safe commands (can run without asking):
 - `tofu validate` — syntax check, no side effects
 - `tofu fmt` / `tofu fmt -check` — formatting, no side effects
+- `tofu test` — unit tests with mock_provider, no cloud credentials, ~3s
+- `tofu test -filter=tests/<file>` — run a single test file
 - `grep`, `cat`, `head`, `tail`, `wc` — read-only
 - `git diff`, `git log`, `git status`, `git show` — read-only
 
@@ -211,7 +215,38 @@ Actual deployments that **use** this module live in `examples/` or in separate r
 | `templates/manifests/` | Raw Kubernetes YAML manifests (System Upgrade Controller) |
 | `templates/values/` | Helm chart values files |
 | `docs/` | Architecture docs — **READ `ARCHITECTURE.md` BEFORE ANY WORK** |
-| `examples/` | Example deployments (`simple-setup/`, `openedx-tutor/`, `rancher-setup/`) |
+| `examples/` | Example deployments (`simple-setup/`, `minimal/`, `rancher-setup/`) |
+| `tests/` | Unit test files (`*.tftest.hcl`) — see [tests/README.md](tests/README.md) |
+| `.github/workflows/` | CI workflow files (12 workflows) — see below |
+
+### CI Workflow Files (.github/workflows/)
+
+All workflow files follow the naming convention `{category}-{tool}.yml`:
+
+| File | Gate | Tool | Trigger |
+|------|:----:|------|---------|
+| `lint-fmt.yml` | 0a | `tofu fmt -check` | push + PR |
+| `lint-validate.yml` | 0a | `tofu validate` | push + PR |
+| `lint-tflint.yml` | 0a | `tflint` | push + PR |
+| `sast-checkov.yml` | 0b | Checkov | push + PR |
+| `sast-kics.yml` | 0b | KICS | push + PR |
+| `sast-tfsec.yml` | 0b | tfsec | push + PR |
+| `unit-variables.yml` | 1 | `tofu test -filter=tests/variables.tftest.hcl` | push + PR |
+| `unit-guardrails.yml` | 1 | `tofu test -filter=tests/guardrails.tftest.hcl` | push + PR |
+| `unit-conditionals.yml` | 1 | `tofu test -filter=tests/conditional_logic.tftest.hcl` | push + PR |
+| `unit-examples.yml` | 1 | `tofu test -filter=tests/examples.tftest.hcl` | push + PR |
+| `integration-plan.yml` | 2 | `tofu plan` (examples/minimal/) | PR + manual |
+| `e2e-apply.yml` | 3 | `tofu apply` + smoke + `tofu destroy` | Manual only |
+
+### Test Files (tests/)
+
+| File | Tests | Scope |
+|------|:-----:|-------|
+| `variables.tftest.hcl` | 23 | Variable `validation {}` blocks (positive + negative) |
+| `guardrails.tftest.hcl` | 16 | Cross-variable `check {}` blocks |
+| `conditional_logic.tftest.hcl` | 22 | Resource count assertions for feature toggles |
+| `examples.tftest.hcl` | 2 | Full-stack example configurations |
+| **Total** | **63** | All tests use `mock_provider`, ~3s, $0 |
 
 ---
 

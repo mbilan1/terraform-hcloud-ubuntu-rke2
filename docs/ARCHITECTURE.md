@@ -20,6 +20,7 @@
 - [Why RKE2](#why-rke2)
 - [Dual Load Balancer Architecture](#dual-load-balancer-architecture)
 - [High Availability](#high-availability)
+- [CI Quality Gates](#ci-quality-gates)
 - [Compromise Log](#compromise-log)
 - [Roadmap](#roadmap)
 - [Out of Scope](#out-of-scope)
@@ -363,7 +364,7 @@ flowchart LR
 
 | Control | Implementation | Status |
 |---------|---------------|--------|
-| SAST / security scanning | trivy, checkov, tflint | 🔲 Planned (CI) |
+| SAST / security scanning | Checkov, KICS, tfsec (CI Gate 0b) | ✅ Implemented |
 | Audit logging | K8s audit policy | 🔲 Planned |
 | Automated OS patching | Kured (HA clusters only) | ✅ Implemented |
 | K8s version upgrades | System Upgrade Controller (HA only) | ✅ Implemented |
@@ -374,7 +375,7 @@ Security of the Ubuntu host OS itself (on which RKE2 runs) **must be addressed s
 
 Recommended approach: apply a hardening baseline via Ansible after provisioning — for example, the [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening) collection.
 
-The module's Terraform code, Helm charts, and Kubernetes manifests should be continuously scanned (trivy, checkov, tfsec) once CI security scanning is enabled.
+The module's Terraform code, Helm charts, and Kubernetes manifests are continuously scanned via CI (Checkov, KICS, tfsec — see [CI Quality Gates](#ci-quality-gates)).
 
 ### Operational Limitations
 
@@ -486,6 +487,124 @@ Both are **disabled on single-master clusters** because rebooting or upgrading t
 
 ---
 
+## CI Quality Gates
+
+The module uses a **layered quality gate pipeline** in GitHub Actions. Each gate catches progressively deeper issues, and every tool has its own workflow file and badge in the README.
+
+### Quality Gate Pyramid
+
+```
+                    ╱╲
+                   ╱  ╲          Gate 3: E2E
+                  ╱ E2E╲         Real infra, apply + smoke + destroy, manual only
+                 ╱──────╲
+                ╱        ╲       Gate 2: Integration
+               ╱  Plan    ╲     tofu plan with real providers, PR + manual
+              ╱────────────╲
+             ╱              ╲    Gate 1: Unit Tests
+            ╱  63 unit tests ╲   tofu test + mock_provider, every PR, ~3s, $0
+           ╱──────────────────╲
+          ╱                    ╲  Gate 0: Static Analysis
+         ╱  fmt · validate ·    ╲ tflint · Checkov · KICS · tfsec
+        ╱────────────────────────╲
+```
+
+### Workflow Inventory
+
+| Gate | Badge Label | Workflow File | Trigger | Cost |
+|:----:|-------------|---------------|---------|:----:|
+| 0a | Lint: fmt | `lint-fmt.yml` | push + PR | $0 |
+| 0a | Lint: validate | `lint-validate.yml` | push + PR | $0 |
+| 0a | Lint: tflint | `lint-tflint.yml` | push + PR | $0 |
+| 0b | SAST: Checkov | `sast-checkov.yml` | push + PR | $0 |
+| 0b | SAST: KICS | `sast-kics.yml` | push + PR | $0 |
+| 0b | SAST: tfsec | `sast-tfsec.yml` | push + PR | $0 |
+| 1 | Unit: variables | `unit-variables.yml` | push + PR | $0 |
+| 1 | Unit: guardrails | `unit-guardrails.yml` | push + PR | $0 |
+| 1 | Unit: conditionals | `unit-conditionals.yml` | push + PR | $0 |
+| 1 | Unit: examples | `unit-examples.yml` | push + PR | $0 |
+| 2 | Integration: plan | `integration-plan.yml` | PR + manual | $0 (plan only) |
+| 3 | E2E: apply | `e2e-apply.yml` | Manual only | ~$0.50/run |
+
+### Naming Convention
+
+All workflow files follow the pattern `{category}-{tool}.yml`:
+- **Category**: `lint`, `sast`, `unit`, `integration`, `e2e`
+- **Badge label**: `Category: Tool` (e.g., `Lint: fmt`, `SAST: Checkov`, `Unit: variables`)
+
+This ensures each badge maps 1:1 to exactly one workflow and one tool.
+
+### Execution Flow
+
+```mermaid
+flowchart LR
+    subgraph gate0["Gate 0: Static Analysis"]
+        direction TB
+        fmt["tofu fmt -check"]
+        validate["tofu validate"]
+        tflint["tflint"]
+        checkov["Checkov"]
+        kics["KICS"]
+        tfsec["tfsec"]
+    end
+
+    subgraph gate1["Gate 1: Unit Tests (63 tests)"]
+        direction TB
+        vars["variables.tftest.hcl\n23 tests"]
+        guards["guardrails.tftest.hcl\n16 tests"]
+        cond["conditional_logic.tftest.hcl\n22 tests"]
+        examples["examples.tftest.hcl\n2 tests"]
+    end
+
+    subgraph gate2["Gate 2: Integration"]
+        plan["tofu plan\nexamples/minimal/"]
+    end
+
+    subgraph gate3["Gate 3: E2E"]
+        apply["tofu apply"]
+        smoke["kubectl get nodes"]
+        destroy["tofu destroy"]
+        apply --> smoke --> destroy
+    end
+
+    gate0 --> gate1 --> gate2 --> gate3
+```
+
+### Unit Test Architecture
+
+All 63 unit tests run **offline** using `tofu test` with `mock_provider`:
+
+| Test File | Tests | Scope |
+|-----------|:-----:|-------|
+| `variables.tftest.hcl` | 23 | Every `validation {}` block with positive + negative cases |
+| `guardrails.tftest.hcl` | 16 | Every `check {}` block (8/10 directly; 2 DNS untestable) |
+| `conditional_logic.tftest.hcl` | 22 | Resource count assertions for all feature toggles |
+| `examples.tftest.hcl` | 2 | Full-stack patterns (minimal, OpenEdX-Tutor) |
+
+Key design decisions:
+- **`mock_provider`** — all 11 providers mocked (hcloud, remote, aws, kubectl, kubernetes, helm, null, random, tls, local, http). Zero credentials, zero cost, ~3s total.
+- **Plan-only** — tests run `command = plan`, never `apply`. No state, no side effects.
+- **Per-file CI** — each test file has its own workflow using `tofu test -filter=tests/{file}.tftest.hcl` for granular badges.
+
+See [tests/README.md](../tests/README.md) for detailed coverage traceability, mock workarounds, and test inventory.
+
+### Integration & E2E Gates
+
+**Integration (Gate 2):**
+- Runs `tofu plan` in `examples/minimal/` with real Hetzner + AWS credentials
+- Triggered on PRs and manual dispatch
+- Skipped when `HAS_CLOUD_CREDENTIALS` repository variable is not `true`
+- Validates provider compatibility and real resource planning without provisioning
+
+**E2E (Gate 3):**
+- Manual dispatch only with explicit cost confirmation checkbox
+- Provisions real infrastructure in `examples/minimal/` (~$0.50/run)
+- Runs smoke test: `kubectl get nodes` to verify cluster is operational
+- Always destroys infrastructure on completion (even on failure)
+- Full lifecycle: `init → plan → apply → smoke → destroy`
+
+---
+
 ## Compromise Log
 
 The module contains many deliberate compromises. Each is documented in code comments at the point of implementation. Here is the summary:
@@ -523,8 +642,8 @@ The path from current state to enterprise-grade, grouped by priority:
 
 - [ ] Proxy protocol on ingress LB (real client IP visibility)
 - [ ] Add `moved` blocks for safe resource renames
-- [ ] Add `.tftest.hcl` unit tests
-- [ ] GitHub Actions CI pipeline (fmt, validate, lint, security scan, test)
+- [x] Add `.tftest.hcl` unit tests — **63 tests** across 4 files (variables, guardrails, conditional logic, examples)
+- [x] GitHub Actions CI pipeline — **12 workflows** (lint ×3, SAST ×3, unit ×4, integration ×1, E2E ×1)
 - [ ] Add `ssh_private_key` and additional outputs
 
 ### Long-term (enterprise-grade target)
@@ -536,7 +655,7 @@ The path from current state to enterprise-grade, grouped by priority:
 - [ ] Kubernetes audit logging
 - [ ] Zero-downtime cluster upgrade strategy
 - [ ] Full `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`
-- [ ] Integration tests (Terratest or `tofu test` with real infrastructure)
+- [x] Integration tests — `tofu plan` with real providers (`integration-plan.yml`) + E2E apply/smoke/destroy (`e2e-apply.yml`)
 
 ---
 
