@@ -52,17 +52,36 @@ module "rke2" {
 
   rke2_cni = "cilium"
 
-  cluster_configuration = {
-    hcloud_controller = { preinstall = true }
-    hcloud_csi        = { preinstall = true, default_storage_class = true }
-    cert_manager      = { preinstall = true }
-  }
-
   harmony = {
     enabled = true
   }
 
   letsencrypt_issuer = var.letsencrypt_email
+
+  # ── Backup configuration ─────────────────────────────────────────────────
+  # etcd snapshots to Hetzner Object Storage (same DC as cluster)
+  cluster_configuration = {
+    hcloud_controller = { preinstall = true }
+    hcloud_csi        = { preinstall = true, default_storage_class = true }
+    cert_manager      = { preinstall = true }
+    etcd_backup = {
+      enabled       = var.enable_backups
+      s3_bucket     = var.backup_s3_bucket
+      s3_access_key = var.backup_s3_access_key
+      s3_secret_key = var.backup_s3_secret_key
+    }
+  }
+
+  # Velero PVC backup via Kopia to Hetzner Object Storage
+  velero = {
+    enabled       = var.enable_backups
+    s3_bucket     = var.backup_s3_bucket
+    s3_access_key = var.backup_s3_access_key
+    s3_secret_key = var.backup_s3_secret_key
+  }
+
+  # Health check: verify /heartbeat after upgrades
+  health_check_urls = var.enable_backups ? ["https://${var.domain}/heartbeat"] : []
 
   # Security: restrict in production
   # ssh_allowed_cidrs     = ["YOUR_IP/32"]

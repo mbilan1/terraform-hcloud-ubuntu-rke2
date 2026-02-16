@@ -10,4 +10,20 @@ locals {
 
   system_upgrade_controller_crds       = try(split("---", data.http.system_upgrade_controller_crds[0].response_body), null)
   system_upgrade_controller_components = try(split("---", data.http.system_upgrade_controller[0].response_body), null)
+
+  # DECISION: Auto-detect Hetzner Object Storage endpoint from lb_location.
+  # Why: Reduces configuration burden — operator only needs bucket + credentials.
+  # Hetzner endpoints follow pattern: {location}.your-objectstorage.com.
+  # See: https://docs.hetzner.com/storage/object-storage/overview
+  etcd_s3_endpoint = (
+    trimspace(var.cluster_configuration.etcd_backup.s3_endpoint) != ""
+    ? var.cluster_configuration.etcd_backup.s3_endpoint
+    : "${var.lb_location}.your-objectstorage.com"
+  )
+
+  etcd_s3_folder = (
+    trimspace(var.cluster_configuration.etcd_backup.s3_folder) != ""
+    ? var.cluster_configuration.etcd_backup.s3_folder
+    : var.cluster_name
+  )
 }

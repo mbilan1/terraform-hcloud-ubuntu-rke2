@@ -176,6 +176,24 @@ variable "cluster_configuration" {
       system_upgrade_controller_version = optional(string, "0.13.4")
       kured_version                     = optional(string, "3.0.1")
     }), {})
+    # DECISION: etcd backup via RKE2 native config.yaml params (zero dependencies)
+    # Why: etcd snapshot is built into RKE2, configured in cloud-init before K8s starts.
+    #      This makes it independent of cluster health — works even if K8s is down.
+    # See: https://docs.rke2.io/datastore/backup_restore
+    etcd_backup = optional(object({
+      enabled               = optional(bool, false)
+      schedule_cron         = optional(string, "0 */6 * * *") # Every 6h (RKE2 default is 12h — too infrequent for production)
+      retention             = optional(number, 10)
+      s3_retention          = optional(number, 10) # S3-specific retention (separate from local). Available since RKE2 v1.34.0+.
+      compress              = optional(bool, true)
+      s3_endpoint           = optional(string, "") # Auto-filled from lb_location if empty
+      s3_bucket             = optional(string, "")
+      s3_folder             = optional(string, "") # Defaults to cluster_name
+      s3_access_key         = optional(string, "")
+      s3_secret_key         = optional(string, "")
+      s3_region             = optional(string, "eu-central")
+      s3_bucket_lookup_type = optional(string, "path") # "path" required for Hetzner Object Storage
+    }), {})
   })
   default     = {}
   description = "Define the cluster configuration. (See README.md for more information.)"
@@ -352,4 +370,53 @@ variable "enable_secrets_encryption" {
   type        = bool
   default     = true
   description = "Enable Kubernetes Secrets encryption at rest in etcd. Strongly recommended for production."
+}
+
+# DECISION: Velero + Kopia for PVC backup (Hetzner CSI has no VolumeSnapshot)
+# Why: Hetzner CSI does not support VolumeSnapshot (GitHub issue #849).
+#      Kopia is the sole uploader since Velero v1.17 (Restic removed).
+# See: https://github.com/hetznercloud/csi-driver/issues/849
+# See: https://velero.io/docs/main/file-system-backup/
+variable "velero" {
+  type = object({
+    enabled               = optional(bool, false)
+    version               = optional(string, "11.3.2")      # Helm chart version (app version: v1.17.1)
+    plugin_version        = optional(string, "v1.13.2")     # velero-plugin-for-aws version (must match Velero app version)
+    backup_schedule       = optional(string, "0 */6 * * *") # Synchronized with etcd schedule
+    backup_ttl            = optional(string, "720h")        # 30 days retention
+    s3_endpoint           = optional(string, "")            # Auto-filled from lb_location if empty
+    s3_bucket             = optional(string, "")
+    s3_access_key         = optional(string, "")
+    s3_secret_key         = optional(string, "")
+    s3_region             = optional(string, "eu-central")
+    s3_bucket_lookup_type = optional(string, "path") # "path" required for Hetzner Object Storage
+    extra_values          = optional(list(string), [])
+  })
+  default     = {}
+  sensitive   = false # But s3_access_key/s3_secret_key are passed to Helm via sensitive values
+  description = <<-EOT
+    Velero backup infrastructure for PVC data protection.
+    Uses Kopia file-level backup (Hetzner CSI does not support VolumeSnapshot).
+    Targets S3-compatible storage (Hetzner Object Storage recommended).
+
+    IMPORTANT: velero-plugin-for-aws plugin_version must match the Velero app
+    version shipped in the chart. Chart 11.3.2 ships Velero v1.17.1, which
+    requires plugin v1.13.x. See compatibility matrix:
+    https://github.com/vmware-tanzu/velero-plugin-for-aws#compatibility
+
+    NOTE: S3 credentials are independent from etcd_backup S3 credentials.
+    Each component manages its own config (module self-contained addon pattern).
+    Share credentials at the module invocation level if desired.
+  EOT
+}
+
+variable "health_check_urls" {
+  type        = list(string)
+  default     = []
+  description = <<-EOT
+    HTTP(S) URLs to check after cluster operations (upgrade, restore).
+    Each URL must return 2xx/3xx to pass. Empty list skips HTTP checks.
+    For OpenEdx: ["https://yourdomain.com/heartbeat"]
+    The /heartbeat endpoint validates MySQL, MongoDB, and app availability.
+  EOT
 }

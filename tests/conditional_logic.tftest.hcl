@@ -535,3 +535,131 @@ run "kured_deployed_on_ha_with_auto_updates" {
     error_message = "Kured namespace must be created on HA cluster when enable_auto_os_updates = true."
   }
 }
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C23: Velero disabled (default) — no Velero resources                   ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "velero_disabled_by_default" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.velero) == 0
+    error_message = "Velero namespace should not exist when velero is disabled (default)."
+  }
+
+  assert {
+    condition     = length(helm_release.velero) == 0
+    error_message = "Velero helm release should not exist when velero is disabled (default)."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C24: Velero enabled — namespace + helm release created                 ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "velero_enabled_creates_resources" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled       = true
+      s3_bucket     = "my-velero-bucket"
+      s3_access_key = "AKIAEXAMPLE"
+      s3_secret_key = "secretkey123"
+    }
+  }
+
+  assert {
+    condition     = length(kubernetes_namespace_v1.velero) == 1
+    error_message = "Velero namespace must be created when velero is enabled."
+  }
+
+  assert {
+    condition     = length(helm_release.velero) == 1
+    error_message = "Velero helm release must be created when velero is enabled."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C25: Pre-upgrade snapshot — not created when etcd backup disabled      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "pre_upgrade_snapshot_disabled_by_default" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+  }
+
+  assert {
+    condition     = length(null_resource.pre_upgrade_snapshot) == 0
+    error_message = "Pre-upgrade snapshot should not exist when etcd backup is disabled (default)."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C26: Pre-upgrade snapshot — created when etcd backup enabled           ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "pre_upgrade_snapshot_enabled_with_etcd_backup" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    cluster_configuration = {
+      etcd_backup = {
+        enabled       = true
+        s3_bucket     = "my-etcd-bucket"
+        s3_access_key = "AKIAEXAMPLE"
+        s3_secret_key = "secretkey123"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(null_resource.pre_upgrade_snapshot) == 1
+    error_message = "Pre-upgrade snapshot must be created when etcd backup is enabled."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C27: Outputs — etcd_backup_enabled and velero_enabled reflect state    ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "outputs_reflect_backup_state" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled       = true
+      s3_bucket     = "my-velero-bucket"
+      s3_access_key = "AKIAEXAMPLE"
+      s3_secret_key = "secretkey123"
+    }
+    cluster_configuration = {
+      etcd_backup = {
+        enabled       = true
+        s3_bucket     = "my-etcd-bucket"
+        s3_access_key = "AKIAEXAMPLE"
+        s3_secret_key = "secretkey123"
+      }
+    }
+  }
+
+  assert {
+    condition     = output.etcd_backup_enabled == true
+    error_message = "etcd_backup_enabled output must be true when etcd backup is enabled."
+  }
+
+  assert {
+    condition     = output.velero_enabled == true
+    error_message = "velero_enabled output must be true when velero is enabled."
+  }
+}

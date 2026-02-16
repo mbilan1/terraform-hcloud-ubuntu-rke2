@@ -14,3 +14,9 @@ domain              = "openedx.example.com"
 # ── Optional ──────────────────────────────────────────────────
 cluster_name      = "openedx"
 letsencrypt_email = "admin@example.com"
+
+# ── Backup (Hetzner Object Storage) ──────────────────────────
+# enable_backups       = true
+# backup_s3_bucket     = "my-openedx-backups"
+# backup_s3_access_key = "YOUR_S3_ACCESS_KEY"
+# backup_s3_secret_key = "YOUR_S3_SECRET_KEY"

@@ -606,6 +606,90 @@ See [tests/README.md](../tests/README.md) for detailed coverage traceability, mo
 
 ---
 
+## Operations: Backup, Upgrade, Rollback
+
+### Backup Strategy
+
+The module implements a **two-layer backup architecture** separating cluster state from application data:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Backup Targets                        │
+│                                                         │
+│  ┌──────────────────────┐  ┌─────────────────────────┐  │
+│  │  Layer 1: etcd       │  │  Layer 2: PVC data      │  │
+│  │  (cluster state)     │  │  (application data)     │  │
+│  │                      │  │                          │  │
+│  │  Mechanism: RKE2     │  │  Mechanism: Velero +     │  │
+│  │  native snapshots    │  │  Kopia FSB               │  │
+│  │                      │  │                          │  │
+│  │  Config: cloud-init  │  │  Config: Helm release    │  │
+│  │  (pre-K8s)           │  │  (requires running K8s)  │  │
+│  └──────────┬───────────┘  └──────────┬──────────────┘  │
+│             │                         │                  │
+│             └─────────┬───────────────┘                  │
+│                       ▼                                  │
+│          Hetzner Object Storage (S3)                     │
+│          {location}.your-objectstorage.com               │
+│          Path-style only, 750 req/s limit                │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Layer 1: etcd (RKE2 Native)
+
+- **Mechanism:** RKE2's built-in `etcd-snapshot-schedule-cron` in `/etc/rancher/rke2/config.yaml`
+- **Configured at:** cloud-init time (before Kubernetes starts)
+- **S3 upload:** Optional, via `etcd-s3`, `etcd-s3-endpoint`, `etcd-s3-bucket` parameters
+- **Path style:** `etcd-s3-bucket-lookup-type: path` (required for Hetzner Object Storage)
+- **Retention:** `etcd-s3-retention` (RKE2 v1.34.0+, separate from local `etcd-snapshot-retention`)
+- **Variable:** `cluster_configuration.etcd_backup`
+- **See:** https://docs.rke2.io/datastore/backup_restore
+
+#### Layer 2: PVC Data (Velero + Kopia)
+
+- **Mechanism:** Velero Helm chart with Kopia file-system backup (FSB)
+- **Why Kopia:** Hetzner CSI does not support VolumeSnapshot ([issue #849](https://github.com/hetznercloud/csi-driver/issues/849)). Restic was removed in Velero v1.17; Kopia is the sole uploader.
+- **Plugin:** `velero-plugin-for-aws` v1.13.x (compatibility: v1.13.x ↔ Velero v1.17.x)
+- **S3 workaround:** `checksumAlgorithm: ""` disables aws-chunked transfer encoding that Hetzner rejects ([issue #8660](https://github.com/vmware-tanzu/velero/issues/8660))
+- **Variable:** `velero` (independent credentials from etcd_backup)
+- **File:** `cluster-velero.tf` (self-contained addon with inline guardrails)
+
+#### Design Decisions
+
+| Decision | Rationale |
+|----------|----------|
+| Separate etcd + Velero layers | etcd backup is pre-K8s (cloud-init), Velero requires running cluster. Different failure modes, different recovery paths. |
+| Separate S3 credentials | Module's self-contained addon pattern. Each addon owns its config. Operators share credentials at invocation level if desired. |
+| Kopia over Restic | Restic removed in Velero v1.17. Kopia is faster (parallelized, content-defined chunking) and has been the default since v1.14. |
+| `snapshotsEnabled: false` | Hetzner CSI has no VolumeSnapshot driver. Disabling prevents unavailable VolumeSnapshotLocation CRD error logs. |
+| Path-style S3 | Hetzner Object Storage does not support virtual-hosted style. Both etcd and Velero require path-style configuration. |
+
+### Upgrade Strategy
+
+Upgrades follow a **snapshot-before-upgrade** pattern:
+
+1. Pre-upgrade on-demand etcd snapshot (via System Upgrade Controller `prepare` hook)
+2. Cordon + drain node
+3. RKE2 binary upgrade (System Upgrade Controller)
+4. Post-upgrade health check (`null_resource.cluster_health_check`)
+
+If the health check fails, the operator can restore the pre-upgrade etcd snapshot.
+
+### Rollback Strategy
+
+Full etcd restore (not binary downgrade) is the recommended rollback path:
+
+1. Stop RKE2 on all nodes
+2. Restore etcd snapshot on master-0
+3. Start master-0, wait for API
+4. Restart additional masters + workers
+5. Velero PVC restore (if needed)
+6. Health check validation
+
+**Why not binary downgrade:** Kubernetes API objects may have been migrated to newer schemas during upgrade. Binary downgrade leaves the cluster in an inconsistent state. etcd restore guarantees consistency.
+
+---
+
 ## Compromise Log
 
 The module contains many deliberate compromises. Each is documented in code comments at the point of implementation. Here is the summary:
@@ -623,6 +707,8 @@ The module contains many deliberate compromises. Each is documented in code comm
 | ModSecurity + Harmony gap | Integration vs complexity | `enable_nginx_modsecurity_waf` has no effect when `harmony.enabled = true` (opt-in). Harmony deploys its own ingress-nginx without ModSecurity support. |
 | DNS requires Harmony | Simplicity vs composability | `create_dns_record = true` targets the ingress LB, so `harmony.enabled = true` is required. This is now guarded by an explicit preflight `check` with a clear error. |
 | RKE2 version pinned | Reproducibility vs freshness | RKE2 defaults to `v1.34.4+rke2r1` (latest in the Rancher-supported v1.34 line). Operators can override via `rke2_version` variable or set to `""` for latest stable. |
+| Hetzner S3 checksum workaround | Compatibility vs standard SDK | `checksumAlgorithm=""` disables aws-sdk-go-v2 default CRC32 checksum. Required because Hetzner Object Storage rejects `aws-chunked` transfer encoding. Community-sourced workaround ([#8660](https://github.com/vmware-tanzu/velero/issues/8660)), E2E validation mandatory. |
+| Separate backup credentials | DRY vs safety | etcd and Velero use independent S3 credentials despite potentially sharing the same Hetzner Object Storage account. `coalesce("","")` causes runtime errors, and credential sharing obscures which addon depends on which secret. Operators can share at invocation level. |
 | GitHub downloads at plan time | Simplicity vs reliability | System Upgrade Controller CRDs are downloaded from GitHub via `data.http` at `tofu plan`. If GitHub is unreachable, plan fails. Vendoring is planned. |
 
 ---
@@ -650,7 +736,10 @@ The path from current state to enterprise-grade, grouped by priority:
 ### Long-term (enterprise-grade target)
 
 - [ ] **Provider extraction** — remove all provider configurations from module (breaking change, major version bump)
-- [ ] etcd backup strategy (automated snapshots to S3-compatible storage)
+- [x] etcd backup strategy (automated snapshots to S3-compatible storage) — **implemented** via `cluster_configuration.etcd_backup`
+- [x] Velero PVC backup to Hetzner Object Storage — **implemented** via `velero` variable
+- [ ] Velero backup observability (monitoring, alerting on failed backups)
+- [ ] Automated restore drill / backup validation
 - [ ] Network Policies (default deny + explicit allow)
 - [ ] Pod Security Standards / admission policies
 - [ ] Kubernetes audit logging
@@ -668,7 +757,7 @@ The following are intentionally **not** part of this module:
 |-------|--------|
 | **OS-level hardening** | Server hardening is the operator's responsibility. Use Ansible roles (e.g., `dev-sec/ansible-collection-hardening`) after provisioning. |
 | **Application deployment** | The module deploys infrastructure and the Harmony chart. Individual Open edX instance deployment (Tutor) is a separate concern. |
-| **Backup and disaster recovery** | etcd snapshots and application backups should be configured by the operator. Built-in backup is on the roadmap. |
+| **Backup and disaster recovery** | The module provides etcd S3 backup (RKE2 native) and Velero + Kopia PVC backup to Hetzner Object Storage. Application-level consistency (pre-backup hooks, `mysqldump`/`mongodump`) is the operator's responsibility at the Tutor deployment layer. Restore drills and backup monitoring are on the roadmap. |
 | **Multi-cluster federation** | The module deploys a single cluster. Multi-cluster patterns are out of scope. |
 | **Custom CNI configuration** | The module supports CNI selection (canal, calico, cilium, none) but does not manage CNI-specific configuration (BGP peers, IP pools, etc.). |
 | **CI/CD pipelines for applications** | The module provides infrastructure. Application CI/CD (ArgoCD, Flux, etc.) is a separate layer. |

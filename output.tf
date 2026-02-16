@@ -66,3 +66,13 @@ output "harmony_infrastructure_values" {
   description = "Infrastructure-specific Harmony values applied by this module (for reference only — already merged into the Helm release)"
   value       = yamlencode(local.harmony_infrastructure_values)
 }
+
+output "etcd_backup_enabled" {
+  description = "Whether automated etcd snapshots with S3 upload are enabled"
+  value       = var.cluster_configuration.etcd_backup.enabled
+}
+
+output "velero_enabled" {
+  description = "Whether Velero PVC backup is enabled"
+  value       = var.velero.enabled
+}

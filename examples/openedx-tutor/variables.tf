@@ -65,3 +65,33 @@ variable "letsencrypt_email" {
   default     = ""
   description = "Email for Let's Encrypt certificate notifications."
 }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Backup
+# ──────────────────────────────────────────────────────────────────────────────
+
+variable "enable_backups" {
+  type        = bool
+  default     = false
+  description = "Enable etcd + Velero backup to Hetzner Object Storage."
+}
+
+variable "backup_s3_bucket" {
+  type        = string
+  default     = ""
+  description = "S3 bucket name for etcd and Velero backups (Hetzner Object Storage)."
+}
+
+variable "backup_s3_access_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "S3 access key for backup bucket."
+}
+
+variable "backup_s3_secret_key" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "S3 secret key for backup bucket."
+}

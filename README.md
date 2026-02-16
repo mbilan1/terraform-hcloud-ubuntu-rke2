@@ -45,6 +45,7 @@ Key capabilities:
 - cert-manager with Let's Encrypt (DNS-01 via Route53)
 - Hetzner CCM + CSI for cloud integration
 - Self-maintenance: Kured + System Upgrade Controller (HA clusters only)
+- Backup: etcd snapshots (RKE2 native) + PVC backup via Velero/Kopia to S3
 
 > [!NOTE]
 > The module allows full `tofu destroy` (including primary control-plane node). In production, protect this operationally with code review, environment protections, and targeted plans/applies.
@@ -124,6 +125,25 @@ tutor plugins enable k8s_harmony
 tutor config save
 tutor k8s launch
 ```
+
+## Backup
+
+The module provides a **two-layer backup architecture** to Hetzner Object Storage (S3-compatible):
+
+| Layer | What | Mechanism | Variable |
+|-------|------|-----------|----------|
+| **etcd** | Cluster state (resources, secrets, configs) | RKE2 native snapshots via `config.yaml` | `cluster_configuration.etcd_backup` |
+| **PVC** | Application data (persistent volumes) | Velero + Kopia file-system backup | `velero` |
+
+Each layer uses **independent S3 credentials** — share them at module invocation level if desired.
+
+> [!WARNING]
+> **Hetzner Object Storage is not listed in Velero's verified S3 providers.**
+> The module uses a `checksumAlgorithm=""` workaround to disable `aws-chunked` transfer encoding
+> that Hetzner rejects ([vmware-tanzu/velero#8660](https://github.com/vmware-tanzu/velero/issues/8660)).
+> Run a full backup+restore E2E test before relying on this in production.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#operations-backup-upgrade-rollback) for design rationale and vendor references.
 
 ## Module Reference
 

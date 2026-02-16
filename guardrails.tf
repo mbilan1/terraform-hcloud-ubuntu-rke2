@@ -54,6 +54,20 @@ check "remote_manifest_downloads_required_for_selected_features" {
   }
 }
 
+check "etcd_backup_requires_s3_config" {
+  assert {
+    condition = (
+      !var.cluster_configuration.etcd_backup.enabled ||
+      (
+        trimspace(var.cluster_configuration.etcd_backup.s3_bucket) != "" &&
+        trimspace(var.cluster_configuration.etcd_backup.s3_access_key) != "" &&
+        trimspace(var.cluster_configuration.etcd_backup.s3_secret_key) != ""
+      )
+    )
+    error_message = "etcd_backup.enabled=true requires s3_bucket, s3_access_key, and s3_secret_key to be set."
+  }
+}
+
 check "rke2_version_format_when_pinned" {
   assert {
     # Reproducibility compromise:

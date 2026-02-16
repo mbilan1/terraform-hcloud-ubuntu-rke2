@@ -329,3 +329,128 @@ run "harmony_requires_workers" {
 # ║  These check blocks are validated in real deployments and via code review.  ║
 # ║  TODO: Add when OpenTofu supports expect_failures for provider errors.     ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G11: etcd_backup_requires_s3_config                                    ║
+# ║  etcd_backup enabled without S3 credentials → warning                      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "etcd_backup_rejects_missing_s3" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    cluster_configuration = {
+      etcd_backup = {
+        enabled = true
+        # s3_bucket, s3_access_key, s3_secret_key intentionally omitted (empty defaults)
+      }
+    }
+  }
+
+  expect_failures = [check.etcd_backup_requires_s3_config]
+}
+
+run "etcd_backup_passes_with_s3" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    cluster_configuration = {
+      etcd_backup = {
+        enabled       = true
+        s3_bucket     = "my-etcd-bucket"
+        s3_access_key = "AKIAEXAMPLE"
+        s3_secret_key = "secretkey123"
+      }
+    }
+  }
+}
+
+run "etcd_backup_passes_when_disabled" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    cluster_configuration = {
+      etcd_backup = {
+        enabled = false
+      }
+    }
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G12: velero_requires_s3_config                                         ║
+# ║  Velero enabled without S3 credentials → warning                           ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "velero_rejects_missing_s3" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled = true
+      # s3_bucket, s3_access_key, s3_secret_key intentionally omitted (empty defaults)
+    }
+  }
+
+  expect_failures = [check.velero_requires_s3_config]
+}
+
+run "velero_passes_with_s3" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled       = true
+      s3_bucket     = "my-velero-bucket"
+      s3_access_key = "AKIAEXAMPLE"
+      s3_secret_key = "secretkey123"
+    }
+  }
+}
+
+run "velero_passes_when_disabled" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled = false
+    }
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G13: velero_requires_csi                                               ║
+# ║  Velero enabled without CSI → warning                                      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "velero_rejects_csi_disabled" {
+  command = plan
+
+  variables {
+    hetzner_token = "mock-token"
+    domain        = "test.example.com"
+    velero = {
+      enabled       = true
+      s3_bucket     = "my-velero-bucket"
+      s3_access_key = "AKIAEXAMPLE"
+      s3_secret_key = "secretkey123"
+    }
+    cluster_configuration = {
+      hcloud_csi = {
+        preinstall = false
+      }
+    }
+  }
+
+  expect_failures = [check.velero_requires_csi]
+}
+
