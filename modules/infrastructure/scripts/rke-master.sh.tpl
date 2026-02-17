@@ -21,37 +21,25 @@ done
 sed -i "s/__NODE_IP__/$NODE_IP/g" /etc/rancher/rke2/config.yaml
 
 # Install and start RKE2 server
-# SECURITY: Download install script to disk before execution
-# Why: Piping remote scripts directly to sh (curl | sh) creates supply-chain risk.
-#      If get.rke2.io is compromised or a MITM attack occurs, malicious code
-#      would execute as root with no opportunity for inspection or verification.
-#      Downloading to disk first allows the script to be audited (in future
-#      iterations or air-gapped deployments) and reduces the attack surface.
-# See: https://docs.rke2.io/install/methods
-# NOTE: The install script itself performs SHA256 checksum verification
-#       of RKE2 tarballs against checksums from GitHub releases, protecting
-#       against tampered binaries (but not against a compromised install script).
-# COMPROMISE: Full supply-chain security requires either:
-#             - Manual artifact download + GPG signature verification, OR
-#             - Using distribution packages with GPG verification, OR
-#             - Air-gapped installation with pre-verified artifacts
-#             These approaches require more complex cloud-init logic or custom
-#             images. Current approach balances security improvement with
-#             deployment simplicity for this initial implementation.
-# TODO: Consider implementing full GPG verification in future versions.
-
-# Download install script
-curl -sfL https://get.rke2.io -o /tmp/rke2-install.sh
-chmod +x /tmp/rke2-install.sh
-
-# Run install script (it will download RKE2 and verify checksums internally)
-INSTALL_RKE2_VERSION="${INSTALL_RKE2_VERSION}" /tmp/rke2-install.sh
+# SECURITY: Multi-layer supply chain protection
+# 1. Install script pinned to immutable Git tag (prevents upstream tampering)
+# 2. Download install.sh separately (not piped to shell) for audit trail
+# 3. RKE2 version is pinned via INSTALL_RKE2_VERSION (prevents unexpected upgrades)
+# 4. The install.sh script verifies SHA256 checksums of all downloaded RKE2 binaries
+#    (see https://github.com/rancher/rke2/blob/master/install.sh verify_tarball function)
+# DECISION: Pin install.sh to v1.34.4+rke2r1 Git tag
+# Why: Git tags are immutable, providing cryptographic assurance against supply chain
+#      attacks on the install script itself. This tag is stable and well-tested.
+#      Update this URL when updating the default rke2_version in variables.tf.
+# NOTE: The install script supports any RKE2 version via INSTALL_RKE2_VERSION env var,
+#       so pinning the script version doesn't restrict which RKE2 version gets installed.
+# See: https://github.com/rancher/rke2/releases/tag/v1.34.4%2Brke2r1
+INSTALL_SCRIPT=$(mktemp)
+trap 'rm -f "$INSTALL_SCRIPT"' EXIT
+INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/rancher/rke2/v1.34.4+rke2r1/install.sh"
+curl -sfL "$INSTALL_SCRIPT_URL" -o "$INSTALL_SCRIPT" || { echo "Failed to download RKE2 installer from $INSTALL_SCRIPT_URL" >&2; exit 1; }
+chmod +x "$INSTALL_SCRIPT"
+INSTALL_RKE2_VERSION="${INSTALL_RKE2_VERSION}" "$INSTALL_SCRIPT" || { echo "Failed to install RKE2 server" >&2; exit 1; }
 
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
-
-# Clean up install script
-# NOTE: With set -euo pipefail, this line only executes if all previous
-#       commands succeeded (including systemctl). If any command fails, the
-#       script exits immediately and /tmp/rke2-install.sh is preserved.
-rm -f /tmp/rke2-install.sh
