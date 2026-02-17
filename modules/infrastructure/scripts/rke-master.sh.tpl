@@ -47,11 +47,11 @@ chmod +x /tmp/rke2-install.sh
 # Run install script (it will download RKE2 and verify checksums internally)
 INSTALL_RKE2_VERSION="${INSTALL_RKE2_VERSION}" /tmp/rke2-install.sh
 
-# Clean up install script
-# NOTE: With set -euo pipefail, this line only executes if all previous
-#       commands succeeded. If systemctl fails, the script exits immediately
-#       and /tmp/rke2-install.sh is preserved for debugging.
-rm -f /tmp/rke2-install.sh
-
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
+
+# Clean up install script
+# NOTE: With set -euo pipefail, this line only executes if all previous
+#       commands succeeded (including systemctl). If any command fails, the
+#       script exits immediately and /tmp/rke2-install.sh is preserved.
+rm -f /tmp/rke2-install.sh
