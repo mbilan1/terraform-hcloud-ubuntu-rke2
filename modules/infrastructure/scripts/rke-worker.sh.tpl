@@ -34,8 +34,8 @@ sed -i "s/__NODE_IP__/$NODE_IP/g" /etc/rancher/rke2/config.yaml
 # See: https://github.com/rancher/terraform-null-rke2-install/blob/main/install.sh
 # TODO: Consider pinning to a specific commit of install.sh for additional assurance
 #       (e.g., https://raw.githubusercontent.com/rancher/rke2/<commit>/install.sh)
-INSTALL_SCRIPT="/tmp/rke2-install.sh"
-curl -sfL https://get.rke2.io -o "$INSTALL_SCRIPT"
+INSTALL_SCRIPT=$(mktemp)
+curl -sfL https://get.rke2.io -o "$INSTALL_SCRIPT" || { echo "Failed to download RKE2 installer"; exit 1; }
 chmod +x "$INSTALL_SCRIPT"
 INSTALL_RKE2_TYPE="agent" INSTALL_RKE2_VERSION="${INSTALL_RKE2_VERSION}" "$INSTALL_SCRIPT"
 rm -f "$INSTALL_SCRIPT"
