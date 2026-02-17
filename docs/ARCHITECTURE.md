@@ -437,6 +437,7 @@ flowchart LR
 | Network isolation | Private network for inter-node traffic | ✅ Implemented |
 | SSH access restriction | Configurable `ssh_allowed_cidrs` | ✅ Implemented |
 | K8s API restriction | Configurable `k8s_api_allowed_cidrs` | ✅ Implemented |
+| RKE2 installation security | Install script downloaded to disk (not piped to sh); script performs SHA256 verification of RKE2 binaries | 🟡 Partially implemented (script integrity not verified) |
 | Egress filtering | Not implemented — all outbound traffic is allowed (Hetzner default) | 🔲 Not implemented |
 
 ### Layer 2: Kubernetes
@@ -473,6 +474,13 @@ Security of the Ubuntu host OS itself (on which RKE2 runs) **must be addressed s
 Recommended approach: apply a hardening baseline via Ansible after provisioning — for example, the [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening) collection.
 
 The module's Terraform code, Helm charts, and Kubernetes manifests are continuously scanned via CI (Checkov, KICS, tfsec — see [CI Quality Gates](#ci-quality-gates)).
+
+**RKE2 installation script integrity**: The bootstrap scripts download the RKE2 installer from `get.rke2.io` to disk before execution (not piped to `sh`), which reduces supply-chain risk compared to `curl | sh` but does not verify the installer script's cryptographic signature. The installer itself performs SHA256 checksum verification of RKE2 binaries. For production environments requiring full supply-chain assurance, consider:
+- Pre-downloading RKE2 artifacts and checksums with GPG signature verification
+- Using distribution packages (RPM) with GPG verification enabled
+- Building custom machine images with pre-installed, verified RKE2 binaries
+
+See [RKE2 Installation Methods](https://docs.rke2.io/install/methods) for secure installation alternatives.
 
 ### Operational Limitations
 
