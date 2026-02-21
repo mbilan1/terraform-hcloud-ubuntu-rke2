@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Maksym Bilan
+# SPDX-License-Identifier: MIT
+#
+# REUSE configuration file
+# See: https://reuse.software/spec-3.3/
+# Why: Centralised licensing metadata for all project files, as recommended
+#      by FSFE for projects where per-file headers are impractical (HCL, YAML,
+#      Markdown, shell templates). This replaces the need for SPDX comments
+#      in every file while maintaining machine-readable compliance.
+
+version = 1
+
+# ─── All source code (Terraform/HCL, shell, YAML templates, Packer) ───
+[[annotations]]
+path = [
+    "*.tf",
+    "modules/**/*.tf",
+    "examples/**/*.tf",
+    "tests/**/*.tftest.hcl",
+    "modules/**/templates/**",
+    "modules/**/scripts/**",
+    "packer/**/*.pkr.hcl",
+    "packer/**/*.yml",
+    "packer/**/*.sh",
+]
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── Documentation ───
+[[annotations]]
+path = [
+    "*.md",
+    "docs/**/*.md",
+    "examples/**/*.md",
+    "tests/**/*.md",
+    "packer/**/*.md",
+]
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── Configuration and CI files ───
+[[annotations]]
+path = [
+    ".github/**",
+    ".gitignore",
+    ".pre-commit-config.yaml",
+    ".terraform-docs.yml",
+]
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── Example configuration files (tfvars, auto.tfvars, YAML examples) ───
+[[annotations]]
+path = [
+    "examples/**/*.example",
+    "examples/**/*.yaml",
+]
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── License file itself ───
+[[annotations]]
+path = "LICENSE"
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── REUSE config (self-referential) ───
+[[annotations]]
+path = "REUSE.toml"
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
+
+# ─── AGENTS.md (AI agent instructions) ───
+[[annotations]]
+path = "AGENTS.md"
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT"
