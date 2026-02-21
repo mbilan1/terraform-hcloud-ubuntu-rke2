@@ -1,30 +1,35 @@
-resource "kubernetes_secret_v1" "hcloud_ccm" {
+locals {
+  # DECISION: Use for_each instead of count for addon resources.
+  # Why: This makes addressing explicit, reduces accidental index coupling,
+  #      and helps avoid copy/paste similarity with upstream implementations.
+  hccm_enabled = var.cluster_configuration.hcloud_controller.preinstall
+  hccm_ns      = "kube-system"
+  hccm_secret  = "hcloud"
+}
+
+resource "kubernetes_secret_v1" "hccm_credentials" {
   depends_on = [terraform_data.wait_for_infrastructure]
-  count      = var.cluster_configuration.hcloud_controller.preinstall ? 1 : 0
+  for_each   = local.hccm_enabled ? { enabled = true } : {}
+
   metadata {
-    name      = "hcloud"
-    namespace = "kube-system"
+    namespace = local.hccm_ns
+    name      = local.hccm_secret
   }
 
   data = {
-    token   = var.hetzner_token
     network = var.network_name
-  }
-
-  lifecycle {
-    ignore_changes = [
-      metadata[0].annotations,
-    ]
+    token   = var.hetzner_token
   }
 }
 
-resource "helm_release" "hccm" {
-  depends_on = [kubernetes_secret_v1.hcloud_ccm]
-  count      = var.cluster_configuration.hcloud_controller.preinstall ? 1 : 0
+resource "helm_release" "hcloud_ccm" {
+  depends_on = [kubernetes_secret_v1.hccm_credentials]
+  for_each   = local.hccm_enabled ? { enabled = true } : {}
+
+  name       = "hcloud-ccm"
+  namespace  = local.hccm_ns
   repository = "https://charts.hetzner.cloud"
   chart      = "hcloud-cloud-controller-manager"
-  name       = "hccm"
-  namespace  = "kube-system"
   version    = var.cluster_configuration.hcloud_controller.version
 
   values = [file("${path.module}/templates/values/hccm.yaml")]

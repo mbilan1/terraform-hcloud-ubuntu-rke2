@@ -57,30 +57,24 @@ variable "rke2_version" {
 variable "rke2_cni" {
   type        = string
   default     = "canal"
-  description = "CNI type to use for the cluster"
+  description = "Cluster CNI (networking) implementation. Allowed values are: canal, calico, cilium, none."
 
   validation {
-    condition     = contains(["canal", "calico", "cilium", "none"], var.rke2_cni)
-    error_message = "The value for CNI must be either 'canal', 'cilium', 'calico' or 'none'."
+    condition     = contains(["calico", "canal", "cilium", "none"], lower(trimspace(var.rke2_cni)))
+    error_message = "rke2_cni must be one of: calico, canal, cilium, none."
   }
 }
 
 variable "generate_ssh_key_file" {
   type        = bool
   default     = false
-  description = "Defines whether the generated ssh key should be stored as local file."
-}
-
-variable "lb_location" {
-  type        = string
-  default     = "hel1"
-  description = "Define the location for the management cluster loadbalancer."
+  description = "When true, write the generated SSH private key to a local file for operator debugging."
 }
 
 variable "additional_lb_service_ports" {
   type        = list(number)
   default     = []
-  description = "Additional TCP ports to expose on the management load balancer (e.g. [8080, 8443])."
+  description = "Extra TCP ports to expose on the control-plane load balancer (in addition to 6443/9345)."
 
   validation {
     condition     = alltrue([for p in var.additional_lb_service_ports : p > 0 && p <= 65535])
@@ -88,10 +82,16 @@ variable "additional_lb_service_ports" {
   }
 }
 
+variable "lb_location" {
+  type        = string
+  default     = "hel1"
+  description = "Hetzner location for the control-plane load balancer (e.g. hel1, nbg1, fsn1)."
+}
+
 variable "network_zone" {
   type        = string
   default     = "eu-central"
-  description = "Define the network location for the cluster."
+  description = "Hetzner network zone for private networking (e.g. eu-central)."
 }
 
 variable "network_address" {

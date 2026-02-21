@@ -39,8 +39,8 @@ resource "kubernetes_secret_v1" "hcloud_csi" {
 resource "helm_release" "hcloud_csi" {
   depends_on = [
     terraform_data.wait_for_infrastructure,
-    kubernetes_secret_v1.hcloud_ccm, # wait for the shared secret if HCCM creates it
-    kubernetes_secret_v1.hcloud_csi, # or the one we create ourselves
+    kubernetes_secret_v1.hccm_credentials, # wait for the shared secret if HCCM creates it
+    kubernetes_secret_v1.hcloud_csi,       # or the one we create ourselves
   ]
 
   count = var.cluster_configuration.hcloud_csi.preinstall ? 1 : 0

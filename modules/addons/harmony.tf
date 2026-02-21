@@ -26,7 +26,7 @@ resource "helm_release" "harmony" {
   depends_on = [
     kubernetes_namespace_v1.harmony,
     helm_release.cert_manager,
-    helm_release.hccm,
+    helm_release.hcloud_ccm,
     helm_release.hcloud_csi,
     helm_release.longhorn, # Storage must be ready before app workloads
   ]

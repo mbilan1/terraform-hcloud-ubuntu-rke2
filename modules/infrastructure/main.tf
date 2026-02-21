@@ -50,11 +50,7 @@ resource "hcloud_server" "master" {
     #   For production, use branch protection + review + targeted plans as the primary
     #   control against accidental control-plane replacement.
 
-    ignore_changes = [
-      user_data,
-      image,
-      server_type
-    ]
+    ignore_changes        = [image, server_type, user_data]
     create_before_destroy = true
   }
 }
@@ -83,16 +79,12 @@ resource "hcloud_server" "additional_masters" {
   }
 
   lifecycle {
-    ignore_changes = [
-      user_data,
-      image,
-      server_type
-    ]
+    ignore_changes        = [image, server_type, user_data]
     create_before_destroy = true
   }
 }
 
-resource "random_string" "worker_node_suffix" {
+resource "random_string" "worker_pool_suffix" {
   count   = var.worker_node_count
   length  = 6
   special = false
@@ -104,7 +96,7 @@ resource "hcloud_server" "worker" {
     hcloud_load_balancer_service.cp_register,
   ]
   count        = var.worker_node_count
-  name         = "${var.cluster_name}-worker-${lower(random_string.worker_node_suffix[count.index].result)}"
+  name         = "${var.cluster_name}-worker-${lower(random_string.worker_pool_suffix[count.index].result)}"
   server_type  = var.worker_node_server_type
   image        = var.worker_node_image
   location     = element(var.node_locations, count.index)
@@ -120,11 +112,7 @@ resource "hcloud_server" "worker" {
   }
 
   lifecycle {
-    ignore_changes = [
-      user_data,
-      image,
-      server_type
-    ]
+    ignore_changes        = [image, server_type, user_data]
     create_before_destroy = true
   }
 }

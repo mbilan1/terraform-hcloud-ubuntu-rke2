@@ -1,15 +1,17 @@
+locals {
+  # DECISION: Use for_each for cert-manager primitives.
+  # Why: Makes conditional resources explicit and helps avoid upstream-derived
+  #      count/index patterns in the generated graph.
+  cert_manager_enabled = var.cluster_configuration.cert_manager.preinstall
+  cert_manager_ns      = "cert-manager"
+}
+
 resource "kubernetes_namespace_v1" "cert_manager" {
   depends_on = [terraform_data.wait_for_infrastructure]
-  count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
-  metadata {
-    name = "cert-manager"
-  }
+  for_each   = local.cert_manager_enabled ? { ns = true } : {}
 
-  lifecycle {
-    ignore_changes = [
-      metadata[0].annotations,
-      metadata[0].labels,
-    ]
+  metadata {
+    name = local.cert_manager_ns
   }
 }
 
@@ -34,7 +36,7 @@ resource "kubernetes_secret_v1" "cert_manager" {
 
 resource "helm_release" "cert_manager" {
   depends_on = [kubernetes_namespace_v1.cert_manager]
-  count      = var.cluster_configuration.cert_manager.preinstall ? 1 : 0
+  for_each   = local.cert_manager_enabled ? { release = true } : {}
 
   name = "cert-manager"
   # https://cert-manager.io/docs/installation/helm/
@@ -42,7 +44,7 @@ resource "helm_release" "cert_manager" {
   chart      = "cert-manager"
   version    = var.cluster_configuration.cert_manager.version
 
-  namespace = "cert-manager"
+  namespace = local.cert_manager_ns
   timeout   = 600
 
   set = [

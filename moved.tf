@@ -37,6 +37,12 @@ moved {
   to   = module.infrastructure.random_string.worker_node_suffix
 }
 
+# Hop 2: rename within module
+moved {
+  from = module.infrastructure.random_string.worker_node_suffix
+  to   = module.infrastructure.random_string.worker_pool_suffix
+}
+
 # --- SSH ---
 
 # Hop 1: root → module (original refactoring)
@@ -209,13 +215,24 @@ moved {
 # --- HCCM ---
 
 moved {
-  from = kubernetes_secret_v1.hcloud_ccm
-  to   = module.addons.kubernetes_secret_v1.hcloud_ccm
+  from = kubernetes_secret_v1.hcloud_ccm[0]
+  to   = module.addons.kubernetes_secret_v1.hcloud_ccm[0]
 }
 
 moved {
-  from = helm_release.hccm
-  to   = module.addons.helm_release.hccm
+  from = helm_release.hccm[0]
+  to   = module.addons.helm_release.hccm[0]
+}
+
+# Hop 2: rename + count → for_each within module
+moved {
+  from = module.addons.kubernetes_secret_v1.hcloud_ccm[0]
+  to   = module.addons.kubernetes_secret_v1.hccm_credentials["enabled"]
+}
+
+moved {
+  from = module.addons.helm_release.hccm[0]
+  to   = module.addons.helm_release.hcloud_ccm["enabled"]
 }
 
 # --- CSI ---
@@ -233,8 +250,8 @@ moved {
 # --- cert-manager ---
 
 moved {
-  from = kubernetes_namespace_v1.cert_manager
-  to   = module.addons.kubernetes_namespace_v1.cert_manager
+  from = kubernetes_namespace_v1.cert_manager[0]
+  to   = module.addons.kubernetes_namespace_v1.cert_manager[0]
 }
 
 moved {
@@ -243,13 +260,24 @@ moved {
 }
 
 moved {
-  from = helm_release.cert_manager
-  to   = module.addons.helm_release.cert_manager
+  from = helm_release.cert_manager[0]
+  to   = module.addons.helm_release.cert_manager[0]
 }
 
 moved {
   from = kubectl_manifest.cert_manager_issuer
   to   = module.addons.kubectl_manifest.cert_manager_issuer
+}
+
+# Hop 2: count → for_each within module
+moved {
+  from = module.addons.kubernetes_namespace_v1.cert_manager[0]
+  to   = module.addons.kubernetes_namespace_v1.cert_manager["ns"]
+}
+
+moved {
+  from = module.addons.helm_release.cert_manager[0]
+  to   = module.addons.helm_release.cert_manager["release"]
 }
 
 # --- Longhorn ---
@@ -311,13 +339,13 @@ moved {
 # --- Self-maintenance ---
 
 moved {
-  from = kubernetes_namespace_v1.kured
-  to   = module.addons.kubernetes_namespace_v1.kured
+  from = kubernetes_namespace_v1.kured[0]
+  to   = module.addons.kubernetes_namespace_v1.kured[0]
 }
 
 moved {
-  from = helm_release.kured
-  to   = module.addons.helm_release.kured
+  from = helm_release.kured[0]
+  to   = module.addons.helm_release.kured[0]
 }
 
 moved {
@@ -343,4 +371,15 @@ moved {
 moved {
   from = kubectl_manifest.system_upgrade_controller_agent_plan
   to   = module.addons.kubectl_manifest.system_upgrade_controller_agent_plan
+}
+
+# Hop 2: count → for_each within module
+moved {
+  from = module.addons.kubernetes_namespace_v1.kured[0]
+  to   = module.addons.kubernetes_namespace_v1.kured["kured"]
+}
+
+moved {
+  from = module.addons.helm_release.kured[0]
+  to   = module.addons.helm_release.kured["kured"]
 }

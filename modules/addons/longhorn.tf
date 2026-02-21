@@ -130,7 +130,7 @@ resource "kubernetes_labels" "longhorn_worker" {
 
   depends_on = [
     terraform_data.wait_for_infrastructure,
-    helm_release.hccm,
+    helm_release.hcloud_ccm,
   ]
 
   api_version = "v1"
@@ -152,7 +152,7 @@ resource "helm_release" "longhorn" {
     kubernetes_namespace_v1.longhorn,
     kubernetes_labels.longhorn_worker,
     kubectl_manifest.longhorn_iscsi_installer,
-    helm_release.hccm,
+    helm_release.hcloud_ccm,
     terraform_data.wait_for_infrastructure,
   ]
   count = var.cluster_configuration.longhorn.preinstall ? 1 : 0
