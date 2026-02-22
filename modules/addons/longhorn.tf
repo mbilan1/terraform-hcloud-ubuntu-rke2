@@ -113,7 +113,11 @@ resource "kubectl_manifest" "longhorn_iscsi_installer" {
             - /bin/sh
             - -c
             - sleep infinity
-            image: registry.k8s.io/pause:3.9
+            # WORKAROUND: Do not use the pause image here.
+            # Why: registry.k8s.io/pause does not contain /bin/sh, so the DaemonSet
+            #      enters CrashLoopBackOff after the initContainer finishes.
+            #      We need a tiny userspace image to keep the pod alive.
+            image: alpine:3.19
   YAML
 }
 
@@ -143,6 +147,43 @@ resource "kubernetes_labels" "longhorn_worker" {
   labels = {
     "node-role.kubernetes.io/worker" = "true"
   }
+}
+
+# --- Longhorn Disk Configuration (Workers) ---
+
+# WORKAROUND: Explicitly define a default Longhorn disk on each worker node.
+# Why: We observed clusters where Longhorn Node objects are created with an empty
+#      spec.disks map. In that state Longhorn cannot schedule replicas and every
+#      new PVC-backed volume becomes faulted/detached with ReplicaSchedulingFailure
+#      ("disks are unavailable"), breaking workloads like Open edX (MySQL/Mongo).
+#
+# Defining disks declaratively makes the "Longhorn-only PVC" path reliable and
+# keeps behavior consistent across environments.
+resource "kubectl_manifest" "longhorn_worker_disks" {
+  count = var.cluster_configuration.longhorn.preinstall ? var.worker_node_count : 0
+
+  depends_on = [
+    terraform_data.wait_for_infrastructure,
+    helm_release.longhorn,
+    kubernetes_labels.longhorn_worker,
+  ]
+
+  yaml_body = <<-YAML
+    apiVersion: longhorn.io/v1beta2
+    kind: Node
+    metadata:
+      name: ${var.worker_node_names[count.index]}
+      namespace: longhorn-system
+    spec:
+      allowScheduling: true
+      disks:
+        default-disk:
+          allowScheduling: true
+          diskType: filesystem
+          evictionRequested: false
+          path: /var/lib/longhorn
+          storageReserved: 0
+  YAML
 }
 
 # --- Helm Release ---
@@ -203,10 +244,13 @@ resource "terraform_data" "longhorn_health_check" {
   provisioner "remote-exec" {
     inline = [
       "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml",
-      "export PATH=\"$$PATH:/var/lib/rancher/rke2/bin\"",
+      # WORKAROUND: Set explicit PATH for non-interactive remote-exec sessions.
+      # Why: Avoid spurious 'grep/date not found' failures if PATH is minimal.
+      "export PATH=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/lib/rancher/rke2/bin\"",
       "echo '=== Longhorn Health Check ===' ",
-      "LH_COUNT=$(kubectl get pods -n longhorn-system --no-headers 2>/dev/null | grep -c Running || true)",
-      "if [ \"$LH_COUNT\" -gt 0 ]; then DEGRADED=$(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{.items[?(@.status.robustness!=\"healthy\")].metadata.name}' 2>/dev/null || true); if [ -n \"$DEGRADED\" ]; then echo \"WARN: Longhorn degraded volumes: $DEGRADED\"; else echo 'PASS: Longhorn all volumes healthy'; fi; else echo 'INFO: No Longhorn volumes found (expected on fresh cluster)'; fi",
+      # NOTE: Avoid grep dependency; count Running pods via field-selector.
+      "LH_COUNT=$(kubectl -n longhorn-system get pods --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo 0)",
+      "if [ \"$LH_COUNT\" -gt 0 ]; then DEGRADED=$(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{.items[?(@.status.robustness!=\"healthy\")].metadata.name}' 2>/dev/null || true); if [ -n \"$DEGRADED\" ]; then echo \"WARN: Longhorn degraded volumes: $DEGRADED\"; else echo 'PASS: Longhorn all volumes healthy'; fi; else echo 'INFO: No Longhorn pods Running yet (expected on fresh cluster)'; fi",
     ]
   }
 }
@@ -234,13 +278,42 @@ resource "terraform_data" "longhorn_pre_upgrade_snapshot" {
   # DECISION: Inline remote-exec instead of file provisioner.
   # Why: Eliminates /tmp/ file upload anti-pattern. No leftover scripts on nodes.
   provisioner "remote-exec" {
+    # WORKAROUND: Use a multi-line script (POSIX sh) instead of a one-liner with
+    # heredocs and semicolons.
+    # Why: The previous one-liner could break under /bin/sh parsing and fail the
+    # apply even when there are no volumes to snapshot (fresh cluster).
     inline = [
-      "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml",
-      "export PATH=\"$$PATH:/var/lib/rancher/rke2/bin\"",
-      "echo 'Creating Longhorn pre-upgrade snapshots...'",
-      "TS=$(date +%s)",
-      "for VOL in $(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do echo \"  Snapshotting: $VOL\"; kubectl -n longhorn-system apply -f - <<SNAP\napiVersion: longhorn.io/v1beta2\nkind: Snapshot\nmetadata:\n  name: pre-upgrade-$${VOL}-$${TS}\n  namespace: longhorn-system\nspec:\n  volume: $$VOL\n  labels:\n    pre-upgrade: \"true\"\nSNAP\n; done",
-      "echo 'DONE: Longhorn snapshots created (instant, COW)'",
+      <<-EOT
+      set -eu
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+      export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/lib/rancher/rke2/bin"
+
+      echo 'Creating Longhorn pre-upgrade snapshots...'
+      TS=$(/usr/bin/date +%s)
+
+      VOLS=$(kubectl get volumes.longhorn.io -n longhorn-system -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+      if [ -z "$VOLS" ]; then
+        echo 'INFO: No Longhorn volumes found — skipping snapshots (expected on fresh cluster)'
+        exit 0
+      fi
+
+      for VOL in $VOLS; do
+        echo "  Snapshotting: $VOL"
+        cat <<YAML | kubectl -n longhorn-system apply -f -
+apiVersion: longhorn.io/v1beta2
+kind: Snapshot
+metadata:
+  name: pre-upgrade-$VOL-$TS
+  namespace: longhorn-system
+spec:
+  volume: $VOL
+  labels:
+    pre-upgrade: "true"
+YAML
+      done
+
+      echo 'DONE: Longhorn snapshots created (instant, COW)'
+      EOT
     ]
   }
 }

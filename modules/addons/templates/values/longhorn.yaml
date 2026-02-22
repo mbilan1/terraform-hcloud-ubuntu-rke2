@@ -13,13 +13,30 @@ defaultSettings:
   # RKE2 does NOT auto-label workers (only masters get role labels).
   # The label is set declaratively via kubernetes_labels after nodes join the cluster.
   systemManagedComponentsNodeSelector: "node-role.kubernetes.io/worker:true"
-  createDefaultDiskLabeledNodes: true
+  # WORKAROUND: Allow Longhorn to create a default disk on each node automatically.
+  # Why: With createDefaultDiskLabeledNodes=true, Longhorn only creates disks on nodes
+  #      that carry the Longhorn-specific "create default disk" label. In fresh clusters
+  #      (like this module's bootstrap flow) that label is not present, resulting in
+  #      zero disks, faulted volumes, and PVC attach failures.
+  #      Disabling it yields a working default out of the box.
+  createDefaultDiskLabeledNodes: false
 
   # --- Backup ---
   backupTarget: "${BACKUP_TARGET}"
   backupTargetCredentialSecret: "${BACKUP_TARGET_CREDENTIAL_SECRET}"
 
   # --- Tuning (see Appendix A of PLAN-operational-readiness.md) ---
+  # DECISION: Keep one replica local to the pod to avoid cross-DC network latency.
+  # Why: In a multi-DC setup, synchronous writes across DCs add ~25ms latency.
+  #      best-effort ensures the pod reads/writes locally if possible.
+  defaultDataLocality: "best-effort"
+  # DECISION: Disable revision counter to halve disk I/O.
+  # Why: Revision counters cause double writes (data + metadata) for every fsync.
+  #      Disabling it significantly improves IOPS for sync-heavy workloads like MySQL.
+  disableRevisionCounter: "true"
+  # DECISION: Auto-balance replicas to maintain HA across nodes.
+  # Why: Works with dataLocality to ensure replicas are distributed evenly.
+  replicaAutoBalance: "best-effort"
   # DECISION: Reserve CPU for instance managers to prevent starvation under load.
   # Default 12% per node. Prevents MySQL I/O stalls during Longhorn replica rebuild.
   guaranteedInstanceManagerCPU: ${GUARANTEED_INSTANCE_MANAGER_CPU}
@@ -47,6 +64,8 @@ persistence:
   defaultClass: ${DEFAULT_STORAGE_CLASS}
   defaultClassReplicaCount: ${REPLICA_COUNT}
   reclaimPolicy: Retain
+  defaultDataLocality: "best-effort"
+  disableRevisionCounter: "true"
 
 longhornUI:
   # DECISION: Enable UI for operational visibility. Access via kubectl port-forward
