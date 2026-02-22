@@ -48,12 +48,24 @@ module "rke2" {
   worker_node_count       = 3
   master_node_server_type = "cx23"
   worker_node_server_type = "cx33"
-  node_locations          = ["hel1", "nbg1", "fsn1"]
+  # DECISION: Demonstrate split placement:
+  # - masters across 3 EU cities
+  # - workers confined to Germany (lower storage RTT for sync-heavy workloads)
+  master_node_locations = ["hel1", "nbg1", "fsn1"]
+  worker_node_locations = ["nbg1", "fsn1"]
+
+  # Backward-compat fallback (unused when master/worker lists are set).
+  node_locations = ["hel1", "nbg1", "fsn1"]
 
   rke2_cni = "cilium"
 
   harmony = {
     enabled = true
+
+    # NOTE: These are defaults; kept explicit in this example to document the
+    # out-of-the-box HTTPS behavior when Harmony is enabled.
+    enable_default_tls_certificate = true
+    default_tls_secret_name        = "harmony-default-tls"
   }
 
   letsencrypt_issuer = var.letsencrypt_email
@@ -62,8 +74,24 @@ module "rke2" {
   # etcd snapshots to Hetzner Object Storage (same DC as cluster)
   cluster_configuration = {
     hcloud_controller = { preinstall = true }
-    hcloud_csi        = { preinstall = true, default_storage_class = true }
-    cert_manager      = { preinstall = true }
+    # DECISION: Use Longhorn for Open edX PVCs in this example
+    # Why: Demonstrates the intended "Longhorn-first" path (snapshots + replication).
+    #      Disabling Hetzner CSI avoids accidentally provisioning hcloud-volumes PVs
+    #      when users expect Longhorn.
+    hcloud_csi   = { preinstall = false, default_storage_class = false }
+    cert_manager = { preinstall = true }
+
+    longhorn = {
+      preinstall            = true
+      default_storage_class = true
+      replica_count         = 2
+
+      # Optional: enable Longhorn backup to S3 (Hetzner Object Storage)
+      # backup_target = "s3://<bucket>@eu-central/<prefix>"
+      # s3_access_key = var.backup_s3_access_key
+      # s3_secret_key = var.backup_s3_secret_key
+    }
+
     etcd_backup = {
       enabled       = var.enable_backups
       s3_bucket     = var.backup_s3_bucket

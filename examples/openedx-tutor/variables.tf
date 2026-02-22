@@ -16,6 +16,17 @@ variable "domain" {
     condition     = length(var.domain) > 0
     error_message = "Domain must not be empty."
   }
+
+  # DECISION: Enforce domain == Route53 record (examples only)
+  # Why: A mismatch (domain != route53_record_name + zone) leads to confusing outcomes:
+  #      - DNS points one name to the ingress LB
+  #      - cert-manager issues certificates for a different name
+  #      - browsers see the wrong certificate or default 404 backend
+  #      This validation makes the example fail fast with a clear message.
+  validation {
+    condition     = var.domain == "${var.route53_record_name}.${var.route53_zone_name}"
+    error_message = "domain must equal '${var.route53_record_name}.${var.route53_zone_name}' to match the Route53 records created by this example."
+  }
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

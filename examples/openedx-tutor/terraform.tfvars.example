@@ -9,7 +9,10 @@ aws_region     = "eu-central-1"
 # ── DNS ───────────────────────────────────────────────────────
 route53_zone_name   = "example.com"
 route53_record_name = "openedx"           # → openedx.example.com
-domain              = "openedx.example.com"
+
+# NOTE: Keep these aligned to avoid confusing DNS/TLS behavior:
+# domain == "${route53_record_name}.${route53_zone_name}"
+domain = "openedx.example.com"
 
 # ── Optional ──────────────────────────────────────────────────
 cluster_name      = "openedx"

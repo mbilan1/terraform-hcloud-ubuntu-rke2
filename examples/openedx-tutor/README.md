@@ -11,8 +11,14 @@ The Harmony Tutor plugin (`k8s_harmony`) handles Ingress creation, TLS settings,
 | RKE2 cluster | 3 masters + 3 workers across 3 EU data centers |
 | Ingress controller | nginx via Harmony chart (hostPort DaemonSet + dedicated LB) |
 | TLS | cert-manager with Route53 DNS-01 ClusterIssuer (`harmony-letsencrypt-global`) |
-| Storage | Hetzner CSI driver (`hcloud-volumes` StorageClass) |
+| Storage | Longhorn (`longhorn` StorageClass, default). Hetzner CSI is disabled in this example. |
 | DNS | Route53 A + wildcard CNAME records |
+
+> [!NOTE]
+> **Out-of-the-box HTTPS (no “Fake Certificate”)**: when Harmony is enabled, the module bootstraps a
+> default TLS certificate for the apex `domain` and configures Harmony's ingress-nginx to use it as
+> the `--default-ssl-certificate`. This avoids the ingress-nginx self-signed fallback certificate
+> during the window *before* Tutor creates per-host Ingress resources.
 
 ## Prerequisites
 
@@ -108,6 +114,10 @@ Tutor uses Caddy as an internal reverse proxy that routes requests by hostname t
 |--------|------|--------|
 | `openedx.example.com` | A | Ingress LB IPv4 (`tofu output ingress_lb_ipv4`) |
 | `*.openedx.example.com` | CNAME | `openedx.example.com` |
+
+> [!IMPORTANT]
+> Keep these aligned: `domain` **must equal** `${route53_record_name}.${route53_zone_name}`.
+> This example enforces it via input validation to prevent hard-to-debug DNS/TLS mismatches.
 
 The wildcard covers subdomains: `studio.*` (CMS), `apps.*` (MFE), `preview.*` (Preview).
 
