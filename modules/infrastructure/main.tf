@@ -17,6 +17,16 @@ resource "random_password" "rke2_token" {
   special = false
 }
 
+locals {
+  # DECISION: Support separate master/worker placement lists.
+  # Why: Masters can be spread across more DCs for control-plane resilience,
+  #      while workers can be confined to fewer DCs (e.g., Germany-only) to
+  #      minimize cross-DC storage latency for stateful workloads.
+  # NOTE: Empty lists fall back to node_locations for backward compatibility.
+  effective_master_node_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
+  effective_worker_node_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+}
+
 resource "hcloud_server" "master" {
   depends_on = [
     hcloud_network_subnet.main
@@ -25,7 +35,7 @@ resource "hcloud_server" "master" {
   name         = "${var.cluster_name}-master-${lower(random_string.master_node_suffix[0].result)}"
   server_type  = var.master_node_server_type
   image        = var.master_node_image
-  location     = element(var.node_locations, 0)
+  location     = element(local.effective_master_node_locations, 0)
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
   # SECURITY: user_data contains RKE2 join token (random_password.rke2_token).
@@ -70,7 +80,9 @@ resource "hcloud_server" "additional_masters" {
   name         = "${var.cluster_name}-master-${lower(random_string.master_node_suffix[count.index + 1].result)}"
   server_type  = var.master_node_server_type
   image        = var.master_node_image
-  location     = element(var.node_locations, count.index + 1)
+  # NOTE: Use modulo to allow shorter location lists than master_node_count.
+  # This keeps behavior predictable (round-robin) while avoiding index errors.
+  location     = element(local.effective_master_node_locations, (count.index + 1) % length(local.effective_master_node_locations))
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
@@ -107,7 +119,7 @@ resource "hcloud_server" "worker" {
   name         = "${var.cluster_name}-worker-${lower(random_string.worker_node_suffix[count.index].result)}"
   server_type  = var.worker_node_server_type
   image        = var.worker_node_image
-  location     = element(var.node_locations, count.index)
+  location     = element(local.effective_worker_node_locations, count.index % length(local.effective_worker_node_locations))
   ssh_keys     = [hcloud_ssh_key.main.id]
   firewall_ids = [hcloud_firewall.cluster.id]
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
@@ -125,6 +137,11 @@ resource "hcloud_server" "worker" {
       image,
       server_type
     ]
-    create_before_destroy = true
+    # WORKAROUND: Do not use create_before_destroy for Hetzner servers with stable names.
+    # Why: Hetzner enforces unique server names. Our names are derived from a random
+    #      suffix resource that does not automatically rotate on replacement, so
+    #      create_before_destroy can fail with "server name is already used".
+    #      For controlled rotations, drain/cordon nodes before apply.
+    create_before_destroy = false
   }
 }

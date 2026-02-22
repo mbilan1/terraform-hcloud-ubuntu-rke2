@@ -10,6 +10,16 @@
 #      docs/ARCHITECTURE.md — Module Architecture
 # ──────────────────────────────────────────────────────────────────────────────
 
+locals {
+  # DECISION: Allow separate master/worker location lists.
+  # Why: Operators may want control-plane nodes spread across multiple EU DCs
+  #      while keeping workers (and thus stateful workloads) confined to a
+  #      subset (e.g., Germany-only) to reduce cross-DC storage latency.
+  # NOTE: Empty lists fall back to node_locations for backward compatibility.
+  effective_master_node_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
+  effective_worker_node_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+}
+
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  L3: Infrastructure — servers, LBs, network, cloud-init, cluster readiness ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -29,6 +39,8 @@ module "infrastructure" {
   master_node_image       = var.master_node_image
   worker_node_image       = var.worker_node_image
   node_locations          = var.node_locations
+  master_node_locations   = local.effective_master_node_locations
+  worker_node_locations   = local.effective_worker_node_locations
 
   # Network
   network_address = var.network_address

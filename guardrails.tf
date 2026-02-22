@@ -5,6 +5,26 @@
 # - check/assert fails early with operator-friendly messages.
 # - This keeps defaults usable while still enforcing critical consistency.
 
+# ── Worker placement guardrails ───────────────────────────────────────────
+
+check "workers_must_not_mix_countries" {
+  assert {
+    # DECISION: Optional strict policy to disallow mixed-country worker pools.
+    # Why: Cross-country RTT pushes synchronous fsync latency into tens of ms,
+    #      making MySQL migrations and other sync-heavy workloads unusably slow.
+    #      Masters can be spread wider; workers should be confined.
+    # NOTE: We only enforce when enforce_single_country_workers=true to keep
+    #       module defaults/backward compatibility intact.
+    condition = (
+      !var.enforce_single_country_workers || (
+        alltrue([for l in local.effective_worker_node_locations : l == "hel1"]) ||
+        alltrue([for l in local.effective_worker_node_locations : contains(["nbg1", "fsn1"], l)])
+      )
+    )
+    error_message = "Workers must be Finland-only (hel1) or Germany-only (nbg1/fsn1) when enforce_single_country_workers=true. Do not mix hel1 with nbg1/fsn1 for workers."
+  }
+}
+
 # ── DNS guardrails (moved from dns.tf — resource moved to modules/infrastructure/) ──
 
 check "dns_requires_zone_id" {

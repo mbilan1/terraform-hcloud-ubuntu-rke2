@@ -128,7 +128,25 @@ variable "subnet_address" {
 variable "node_locations" {
   type        = list(string)
   default     = ["hel1", "nbg1", "fsn1"]
-  description = "Define the location in which nodes will be deployed. (Must be in the same network zone.)"
+  description = "(Deprecated) Locations for node placement when master_node_locations/worker_node_locations are not set. Must be in the same network zone."
+}
+
+variable "master_node_locations" {
+  type        = list(string)
+  default     = []
+  description = "Optional list of Hetzner locations to place control-plane nodes. If empty, node_locations is used. Why: allows masters spread across multiple cities while keeping workers in a subset (e.g., Germany-only)."
+}
+
+variable "worker_node_locations" {
+  type        = list(string)
+  default     = []
+  description = "Optional list of Hetzner locations to place worker nodes. If empty, node_locations is used. Why: lets you keep workload I/O local (e.g., Germany-only) while masters can span more regions."
+}
+
+variable "enforce_single_country_workers" {
+  type        = bool
+  default     = false
+  description = "When true, forbid mixing worker locations across countries (e.g., hel1 + nbg1). Why: sync-heavy storage (Longhorn/MySQL) becomes unusably slow with cross-country RTT; enforce a single-country worker pool (Germany-only or Finland-only)."
 }
 
 variable "master_node_image" {
@@ -312,6 +330,16 @@ variable "harmony" {
     enabled      = optional(bool, false)
     version      = optional(string, "")
     extra_values = optional(list(string), [])
+
+    # DECISION: TLS bootstrap for "platform is working" UX when Harmony is enabled.
+    # Why: openedx-k8s-harmony's echo Ingress is HTTP-only (no tls: block), so
+    #      ingress-nginx serves its self-signed "Fake Certificate" for catch-all HTTPS.
+    #      Providing a cert-manager Certificate + ingress-nginx default-ssl-certificate
+    #      makes https://<domain>/ present a valid cert out of the box, even before
+    #      Tutor/Open edX creates any TLS-enabled Ingress resources.
+    # See: https://kubernetes.github.io/ingress-nginx/user-guide/tls/#default-ssl-certificate
+    enable_default_tls_certificate = optional(bool, true)
+    default_tls_secret_name        = optional(string, "harmony-default-tls")
   })
   default     = {}
   description = <<-EOT
@@ -319,6 +347,9 @@ variable "harmony" {
     - enabled: Deploy Harmony chart via Helm. Disables RKE2 built-in ingress-nginx and routes HTTP/HTTPS through the management LB.
     - version: Chart version to install. Empty string means latest.
     - extra_values: Additional values.yaml content (list of YAML strings) merged after infrastructure defaults.
+    - enable_default_tls_certificate: When true, the module creates a cert-manager Certificate for var.domain
+      and configures Harmony's ingress-nginx controller to use it as the default HTTPS certificate.
+    - default_tls_secret_name: Secret name (in the harmony namespace) used for the default TLS certificate.
   EOT
 }
 

@@ -211,6 +211,45 @@ run "remote_downloads_passes_when_enabled" {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G04b: workers_must_not_mix_countries                                    ║
+# ║  enforce_single_country_workers=true → workers must be DE-only or FI-only   ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "workers_country_policy_passes_germany" {
+  command = plan
+
+  variables {
+    hetzner_token                 = "mock-token"
+    domain                        = "test.example.com"
+    enforce_single_country_workers = true
+    worker_node_locations          = ["nbg1", "fsn1"]
+  }
+}
+
+run "workers_country_policy_passes_finland" {
+  command = plan
+
+  variables {
+    hetzner_token                 = "mock-token"
+    domain                        = "test.example.com"
+    enforce_single_country_workers = true
+    worker_node_locations          = ["hel1"]
+  }
+}
+
+run "workers_country_policy_rejects_mixed" {
+  command = plan
+
+  variables {
+    hetzner_token                 = "mock-token"
+    domain                        = "test.example.com"
+    enforce_single_country_workers = true
+    worker_node_locations          = ["hel1", "nbg1"]
+  }
+
+  expect_failures = [check.workers_must_not_mix_countries]
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  UT-G05: rke2_version_format_when_pinned                                   ║
 # ║  Pinned version must match v1.31.6+rke2r1 format                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝

@@ -56,6 +56,18 @@ variable "node_locations" {
   type        = list(string)
 }
 
+variable "master_node_locations" {
+  description = "Optional list of Hetzner locations for master node placement. If empty, node_locations is used."
+  type        = list(string)
+  default     = []
+}
+
+variable "worker_node_locations" {
+  description = "Optional list of Hetzner locations for worker node placement. If empty, node_locations is used."
+  type        = list(string)
+  default     = []
+}
+
 # --- Network ---
 
 variable "network_address" {
