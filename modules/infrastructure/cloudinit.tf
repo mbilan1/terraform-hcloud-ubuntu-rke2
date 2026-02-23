@@ -9,14 +9,14 @@
 # See: https://developer.hashicorp.com/terraform/language/post-apply-operations
 #
 # DECISION: Cloud-init is inlined in infrastructure module (not separate bootstrap).
-# Why: Cloud-init needs random_password.rke2_token and hcloud_load_balancer.control_plane.ipv4
+# Why: Cloud-init needs random_password.cluster_join_secret and hcloud_load_balancer.control_plane.ipv4
 #      which are both created in this module. A separate bootstrap module would
 #      create a circular dependency (bootstrap needs LB IP, infrastructure needs user_data).
 # ──────────────────────────────────────────────────────────────────────────────
 
 # --- Master (initial bootstrap node) ---
 
-data "cloudinit_config" "master" {
+data "cloudinit_config" "initial_control_plane" {
   # NOTE: Hetzner Cloud accepts plaintext user_data (no base64/gzip needed).
   gzip          = false
   base64_encode = false
@@ -34,7 +34,7 @@ data "cloudinit_config" "master" {
           path        = "/etc/rancher/rke2/config.yaml"
           permissions = "0600"
           content = templatefile("${path.module}/templates/cloudinit/rke2-server-config.yaml.tpl", {
-            RKE_TOKEN = random_password.rke2_token.result
+            RKE_TOKEN = random_password.cluster_join_secret.result
             # WORKAROUND: master-0 must always bootstrap on create.
             # Why: We create the control-plane LB in the same apply (needed for tls-san).
             #      OpenTofu may refresh data sources during apply after the LB exists,
@@ -45,7 +45,7 @@ data "cloudinit_config" "master" {
             #      at creation time and does not change on subsequent applies.
             INITIAL_MASTER             = true
             SERVER_ADDRESS             = hcloud_load_balancer.control_plane.ipv4
-            RKE2_CNI                   = var.rke2_cni
+            RKE2_CNI                   = var.cni_plugin
             ENABLE_SECRETS_ENCRYPTION  = var.enable_secrets_encryption
             DISABLE_INGRESS            = var.harmony_enabled
             ETCD_BACKUP_ENABLED        = var.etcd_backup.enabled
@@ -74,7 +74,7 @@ data "cloudinit_config" "master" {
     content_type = "text/x-shellscript"
     filename     = "rke2-bootstrap.sh"
     content = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
-      INSTALL_RKE2_VERSION = var.rke2_version
+      INSTALL_RKE2_VERSION = var.kubernetes_version
     })
   }
 }
@@ -82,7 +82,7 @@ data "cloudinit_config" "master" {
 # --- Additional masters (join existing cluster) ---
 
 data "cloudinit_config" "additional_master" {
-  count = var.master_node_count > 1 ? var.master_node_count - 1 : 0
+  count = var.control_plane_count > 1 ? var.control_plane_count - 1 : 0
 
   gzip          = false
   base64_encode = false
@@ -96,10 +96,10 @@ data "cloudinit_config" "additional_master" {
           path        = "/etc/rancher/rke2/config.yaml"
           permissions = "0600"
           content = templatefile("${path.module}/templates/cloudinit/rke2-server-config.yaml.tpl", {
-            RKE_TOKEN                  = random_password.rke2_token.result
+            RKE_TOKEN                  = random_password.cluster_join_secret.result
             INITIAL_MASTER             = false
             SERVER_ADDRESS             = hcloud_load_balancer.control_plane.ipv4
-            RKE2_CNI                   = var.rke2_cni
+            RKE2_CNI                   = var.cni_plugin
             ENABLE_SECRETS_ENCRYPTION  = var.enable_secrets_encryption
             DISABLE_INGRESS            = var.harmony_enabled
             ETCD_BACKUP_ENABLED        = var.etcd_backup.enabled
@@ -124,15 +124,15 @@ data "cloudinit_config" "additional_master" {
     content_type = "text/x-shellscript"
     filename     = "rke2-bootstrap.sh"
     content = templatefile("${path.module}/scripts/rke-master.sh.tpl", {
-      INSTALL_RKE2_VERSION = var.rke2_version
+      INSTALL_RKE2_VERSION = var.kubernetes_version
     })
   }
 }
 
 # --- Workers ---
 
-data "cloudinit_config" "worker" {
-  count = var.worker_node_count
+data "cloudinit_config" "agent" {
+  count = var.agent_node_count
 
   gzip          = false
   base64_encode = false
@@ -146,7 +146,7 @@ data "cloudinit_config" "worker" {
           path        = "/etc/rancher/rke2/config.yaml"
           permissions = "0600"
           content = templatefile("${path.module}/templates/cloudinit/rke2-agent-config.yaml.tpl", {
-            RKE_TOKEN      = random_password.rke2_token.result
+            RKE_TOKEN      = random_password.cluster_join_secret.result
             SERVER_ADDRESS = hcloud_load_balancer.control_plane.ipv4
           })
         },
@@ -158,7 +158,7 @@ data "cloudinit_config" "worker" {
     content_type = "text/x-shellscript"
     filename     = "rke2-bootstrap.sh"
     content = templatefile("${path.module}/scripts/rke-worker.sh.tpl", {
-      INSTALL_RKE2_VERSION = var.rke2_version
+      INSTALL_RKE2_VERSION = var.kubernetes_version
     })
   }
 }

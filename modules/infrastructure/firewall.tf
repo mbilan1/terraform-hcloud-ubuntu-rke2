@@ -1,5 +1,5 @@
 resource "hcloud_firewall" "cluster" {
-  name = "${var.cluster_name}-firewall"
+  name = "${var.rke2_cluster_name}-firewall"
 
   # Allow HTTP
   rule {
@@ -59,7 +59,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "tcp"
     port        = "9345"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 
@@ -70,7 +70,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "tcp"
     port        = "2379-2380"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 
@@ -81,7 +81,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "tcp"
     port        = "10250"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 
@@ -92,7 +92,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "tcp"
     port        = "30000-32767"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 
@@ -111,7 +111,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "udp"
     port        = "8472"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 
@@ -125,7 +125,7 @@ resource "hcloud_firewall" "cluster" {
     protocol    = "udp"
     port        = "51820-51821"
     source_ips = [
-      var.network_address
+      var.hcloud_network_cidr
     ]
   }
 

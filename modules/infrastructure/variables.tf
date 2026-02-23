@@ -8,7 +8,7 @@
 
 # --- Cloud credentials ---
 
-variable "hetzner_token" {
+variable "hcloud_api_token" {
   description = "Hetzner Cloud API token"
   type        = string
   sensitive   = true
@@ -16,17 +16,17 @@ variable "hetzner_token" {
 
 # --- Cluster basics ---
 
-variable "cluster_name" {
+variable "rke2_cluster_name" {
   description = "Name prefix for all resources"
   type        = string
 }
 
-variable "master_node_count" {
+variable "control_plane_count" {
   description = "Number of master (control plane) nodes"
   type        = number
 }
 
-variable "worker_node_count" {
+variable "agent_node_count" {
   description = "Number of worker nodes"
   type        = number
 }
@@ -70,7 +70,7 @@ variable "worker_node_locations" {
 
 # --- Network ---
 
-variable "network_address" {
+variable "hcloud_network_cidr" {
   description = "CIDR for the private network"
   type        = string
 }
@@ -80,19 +80,19 @@ variable "subnet_address" {
   type        = string
 }
 
-variable "network_zone" {
+variable "hcloud_network_zone" {
   description = "Network zone for the subnet"
   type        = string
 }
 
 # --- Load Balancer ---
 
-variable "lb_location" {
+variable "load_balancer_location" {
   description = "Location for load balancers"
   type        = string
 }
 
-variable "additional_lb_service_ports" {
+variable "extra_lb_ports" {
   description = "Additional ports for the ingress load balancer"
   type        = list(number)
 }
@@ -116,7 +116,7 @@ variable "k8s_api_allowed_cidrs" {
 
 # --- SSH key ---
 
-variable "generate_ssh_key_file" {
+variable "save_ssh_key_locally" {
   description = "Whether to write the SSH private key to a local file"
   type        = bool
 }
@@ -133,7 +133,7 @@ variable "route53_zone_id" {
   type        = string
 }
 
-variable "domain" {
+variable "cluster_domain" {
   description = "Domain name for DNS records"
   type        = string
 }
@@ -153,12 +153,12 @@ variable "harmony_enabled" {
 #      Inlining eliminates the cycle and keeps the module self-contained.
 # See: docs/ARCHITECTURE.md — Cloud-Init Architecture
 
-variable "rke2_version" {
+variable "kubernetes_version" {
   description = "RKE2 version to install (e.g. 'v1.34.4+rke2r1'). Empty string installs latest stable."
   type        = string
 }
 
-variable "rke2_cni" {
+variable "cni_plugin" {
   description = "CNI plugin for RKE2 (canal, calico, cilium, none)"
   type        = string
 }

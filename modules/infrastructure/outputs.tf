@@ -41,12 +41,12 @@ output "kube_config" {
 
 output "network_id" {
   description = "The ID of the Hetzner Cloud private network"
-  value       = hcloud_network.main.id
+  value       = hcloud_network.cluster.id
 }
 
 output "network_name" {
   description = "The name of the Hetzner Cloud private network"
-  value       = hcloud_network.main.name
+  value       = hcloud_network.cluster.name
 }
 
 # --- Load Balancers ---
@@ -65,29 +65,29 @@ output "ingress_lb_ipv4" {
 
 output "master_nodes_ipv4" {
   description = "The public IPv4 addresses of all master nodes"
-  value       = concat(hcloud_server.master[*].ipv4_address, hcloud_server.additional_masters[*].ipv4_address)
+  value       = concat(hcloud_server.initial_control_plane[*].ipv4_address, hcloud_server.control_plane[*].ipv4_address)
 }
 
 output "worker_nodes_ipv4" {
   description = "The public IPv4 addresses of all worker nodes"
-  value       = hcloud_server.worker[*].ipv4_address
+  value       = hcloud_server.agent[*].ipv4_address
 }
 
 output "worker_node_names" {
   description = "The names of all worker nodes (for kubernetes_labels in addons)"
-  value       = hcloud_server.worker[*].name
+  value       = hcloud_server.agent[*].name
 }
 
 # --- SSH (for provisioners in addons module) ---
 
 output "master_ipv4" {
   description = "IPv4 of master[0] for SSH provisioners"
-  value       = hcloud_server.master[0].ipv4_address
+  value       = hcloud_server.initial_control_plane[0].ipv4_address
 }
 
 output "ssh_private_key" {
   description = "The SSH private key for remote-exec provisioners"
-  value       = tls_private_key.machines.private_key_openssh
+  value       = tls_private_key.ssh_identity.private_key_openssh
   sensitive   = true
 }
 
@@ -115,9 +115,9 @@ output "_test_counts" {
   description = "Resource counts for unit testing. Not part of the public API."
   value = {
     ingress_lb           = length(hcloud_load_balancer.ingress)
-    additional_masters   = length(hcloud_server.additional_masters)
-    masters              = length(hcloud_server.master)
-    workers              = length(hcloud_server.worker)
+    additional_masters   = length(hcloud_server.control_plane)
+    masters              = length(hcloud_server.initial_control_plane)
+    workers              = length(hcloud_server.agent)
     cp_ssh_service       = length(hcloud_load_balancer_service.cp_ssh)
     ssh_key_file         = length(local_sensitive_file.ssh_private_key)
     dns_record           = length(aws_route53_record.wildcard)

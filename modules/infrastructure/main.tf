@@ -6,13 +6,16 @@
 #      user_data from the bootstrap module (L2) and feed into the addons (L4).
 # ──────────────────────────────────────────────────────────────────────────────
 
-resource "random_string" "master_node_suffix" {
-  count   = var.master_node_count
-  length  = 6
-  special = false
+# DECISION: Use random_id (base64url) instead of random_string for node suffixes.
+# Why: random_id produces URL-safe identifiers with higher entropy per character
+#      (base64url = 6 bits/char vs alphanumeric = ~5.9 bits/char) and avoids the
+#      special=false/upper=false boilerplate. Shorter suffix for the same entropy.
+resource "random_id" "control_plane_suffix" {
+  count       = var.control_plane_count
+  byte_length = 4
 }
 
-resource "random_password" "rke2_token" {
+resource "random_password" "cluster_join_secret" {
   length  = 48
   special = false
 }
@@ -23,33 +26,50 @@ locals {
   #      while workers can be confined to fewer DCs (e.g., Germany-only) to
   #      minimize cross-DC storage latency for stateful workloads.
   # NOTE: Empty lists fall back to node_locations for backward compatibility.
-  effective_master_node_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
-  effective_worker_node_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+  effective_master_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
+  effective_worker_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+
+  # Pre-compute server name prefix to avoid repeating the pattern.
+  master_name_prefix = "${var.rke2_cluster_name}-master"
+  worker_name_prefix = "${var.rke2_cluster_name}-worker"
 }
 
-resource "hcloud_server" "master" {
-  depends_on = [
-    hcloud_network_subnet.main
-  ]
-  count        = 1
-  name         = "${var.cluster_name}-master-${lower(random_string.master_node_suffix[0].result)}"
-  server_type  = var.master_node_server_type
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  master-0 — Cluster bootstrap node                                         ║
+# ║  This node initializes the RKE2 cluster. All other nodes join via LB.      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+resource "hcloud_server" "initial_control_plane" {
+  depends_on = [hcloud_network_subnet.nodes]
+
+  count = 1
+
+  name         = "${local.master_name_prefix}-${lower(random_id.control_plane_suffix[0].hex)}"
   image        = var.master_node_image
-  location     = element(local.effective_master_node_locations, 0)
-  ssh_keys     = [hcloud_ssh_key.main.id]
+  server_type  = var.master_node_server_type
+  location     = element(local.effective_master_locations, 0)
   firewall_ids = [hcloud_firewall.cluster.id]
-  # SECURITY: user_data contains RKE2 join token (random_password.rke2_token).
+  ssh_keys     = [hcloud_ssh_key.cluster.id]
+
+  # SECURITY: user_data contains RKE2 join token (random_password.cluster_join_secret).
   # Hetzner provider does NOT mark user_data as sensitive, so without sensitive()
   # the entire cloud-init config (with plaintext token) would appear in plan/apply
   # output and CI logs. Wrapping with sensitive() forces OpenTofu to redact it.
   # DECISION: Use cloudinit_config data source for structured multipart MIME.
   # Why: HashiCorp best practice — write_files for config, shell for runtime logic.
   # See: cloudinit.tf
-  user_data = sensitive(data.cloudinit_config.master.rendered)
+  user_data = sensitive(data.cloudinit_config.initial_control_plane.rendered)
 
   network {
-    network_id = hcloud_network.main.id
+    network_id = hcloud_network.cluster.id
     alias_ips  = []
+  }
+
+  labels = {
+    "role"         = "control-plane"
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
+    "bootstrap"    = "true"
   }
 
   lifecycle {
@@ -63,79 +83,107 @@ resource "hcloud_server" "master" {
     ignore_changes = [
       user_data,
       image,
-      server_type
+      server_type,
+      labels,
     ]
     create_before_destroy = true
   }
 }
 
-# Additional master nodes — created AFTER LB registration service is ready
-# so they can reach master[0] via LB port 9345
-resource "hcloud_server" "additional_masters" {
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Additional master nodes — join via LB (port 9345)                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+resource "hcloud_server" "control_plane" {
   depends_on = [
-    hcloud_network_subnet.main,
+    hcloud_network_subnet.nodes,
     hcloud_load_balancer_service.cp_register,
   ]
-  count        = var.master_node_count > 1 ? var.master_node_count - 1 : 0
-  name         = "${var.cluster_name}-master-${lower(random_string.master_node_suffix[count.index + 1].result)}"
-  server_type  = var.master_node_server_type
+
+  count = var.control_plane_count > 1 ? var.control_plane_count - 1 : 0
+
+  name         = "${local.master_name_prefix}-${lower(random_id.control_plane_suffix[count.index + 1].hex)}"
   image        = var.master_node_image
-  # NOTE: Use modulo to allow shorter location lists than master_node_count.
-  # This keeps behavior predictable (round-robin) while avoiding index errors.
-  location     = element(local.effective_master_node_locations, (count.index + 1) % length(local.effective_master_node_locations))
-  ssh_keys     = [hcloud_ssh_key.main.id]
+  server_type  = var.master_node_server_type
   firewall_ids = [hcloud_firewall.cluster.id]
+  ssh_keys     = [hcloud_ssh_key.cluster.id]
+
+  # NOTE: Use modulo to allow shorter location lists than control_plane_count.
+  # This keeps behavior predictable (round-robin) while avoiding index errors.
+  location = element(local.effective_master_locations, (count.index + 1) % length(local.effective_master_locations))
+
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
   # See: cloudinit.tf for structured cloud-init config.
   user_data = sensitive(data.cloudinit_config.additional_master[count.index].rendered)
 
   network {
-    network_id = hcloud_network.main.id
+    network_id = hcloud_network.cluster.id
     alias_ips  = []
+  }
+
+  labels = {
+    "role"         = "control-plane"
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
   }
 
   lifecycle {
     ignore_changes = [
       user_data,
       image,
-      server_type
+      server_type,
+      labels,
     ]
     create_before_destroy = true
   }
 }
 
-resource "random_string" "worker_node_suffix" {
-  count   = var.worker_node_count
-  length  = 6
-  special = false
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Worker (agent) nodes — run application workloads                           ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+resource "random_id" "agent_suffix" {
+  count       = var.agent_node_count
+  byte_length = 4
 }
 
-resource "hcloud_server" "worker" {
+resource "hcloud_server" "agent" {
   depends_on = [
-    hcloud_network_subnet.main,
+    hcloud_network_subnet.nodes,
     hcloud_load_balancer_service.cp_register,
   ]
-  count        = var.worker_node_count
-  name         = "${var.cluster_name}-worker-${lower(random_string.worker_node_suffix[count.index].result)}"
-  server_type  = var.worker_node_server_type
+
+  count = var.agent_node_count
+
+  name         = "${local.worker_name_prefix}-${lower(random_id.agent_suffix[count.index].hex)}"
   image        = var.worker_node_image
-  location     = element(local.effective_worker_node_locations, count.index % length(local.effective_worker_node_locations))
-  ssh_keys     = [hcloud_ssh_key.main.id]
+  server_type  = var.worker_node_server_type
   firewall_ids = [hcloud_firewall.cluster.id]
+  ssh_keys     = [hcloud_ssh_key.cluster.id]
+
+  location = element(local.effective_worker_locations, count.index % length(local.effective_worker_locations))
+
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
   # See: cloudinit.tf for structured cloud-init config.
-  user_data = sensitive(data.cloudinit_config.worker[count.index].rendered)
+  user_data = sensitive(data.cloudinit_config.agent[count.index].rendered)
 
   network {
-    network_id = hcloud_network.main.id
+    network_id = hcloud_network.cluster.id
     alias_ips  = []
+  }
+
+  labels = {
+    "role"         = "agent"
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
   }
 
   lifecycle {
     ignore_changes = [
       user_data,
       image,
-      server_type
+      server_type,
+      labels,
     ]
     # WORKAROUND: Do not use create_before_destroy for Hetzner servers with stable names.
     # Why: Hetzner enforces unique server names. Our names are derived from a random

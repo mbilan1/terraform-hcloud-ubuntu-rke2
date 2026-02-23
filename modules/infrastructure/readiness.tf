@@ -12,7 +12,7 @@
 resource "terraform_data" "wait_for_api" {
   depends_on = [
     hcloud_load_balancer_service.cp_k8s_api,
-    hcloud_server.master,
+    hcloud_server.initial_control_plane,
   ]
 
   provisioner "remote-exec" {
@@ -76,9 +76,9 @@ resource "terraform_data" "wait_for_api" {
 
     connection {
       type        = "ssh"
-      host        = hcloud_server.master[0].ipv4_address
+      host        = hcloud_server.initial_control_plane[0].ipv4_address
       user        = "root"
-      private_key = tls_private_key.machines.private_key_openssh
+      private_key = tls_private_key.ssh_identity.private_key_openssh
       timeout     = "15m"
     }
   }
@@ -89,16 +89,16 @@ resource "terraform_data" "wait_for_api" {
 resource "terraform_data" "wait_for_cluster_ready" {
   depends_on = [
     terraform_data.wait_for_api,
-    hcloud_server.master,
-    hcloud_server.additional_masters,
-    hcloud_server.worker,
+    hcloud_server.initial_control_plane,
+    hcloud_server.control_plane,
+    hcloud_server.agent,
   ]
 
   provisioner "remote-exec" {
     inline = [
-      "echo 'Waiting for all ${var.master_node_count + var.worker_node_count} node(s) to become Ready...'",
+      "echo 'Waiting for all ${var.control_plane_count + var.agent_node_count} node(s) to become Ready...'",
       <<-EOT
-      EXPECTED=${var.master_node_count + var.worker_node_count}
+      EXPECTED=${var.control_plane_count + var.agent_node_count}
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
       KC=/var/lib/rancher/rke2/bin/kubectl
 
@@ -137,9 +137,9 @@ resource "terraform_data" "wait_for_cluster_ready" {
 
     connection {
       type        = "ssh"
-      host        = hcloud_server.master[0].ipv4_address
+      host        = hcloud_server.initial_control_plane[0].ipv4_address
       user        = "root"
-      private_key = tls_private_key.machines.private_key_openssh
+      private_key = tls_private_key.ssh_identity.private_key_openssh
       timeout     = "15m"
     }
   }
@@ -159,9 +159,9 @@ data "remote_file" "kubeconfig" {
     terraform_data.wait_for_cluster_ready
   ]
   conn {
-    host        = hcloud_server.master[0].ipv4_address
+    host        = hcloud_server.initial_control_plane[0].ipv4_address
     user        = "root"
-    private_key = tls_private_key.machines.private_key_openssh
+    private_key = tls_private_key.ssh_identity.private_key_openssh
     sudo        = true
     timeout     = 500
   }
@@ -186,13 +186,13 @@ resource "terraform_data" "pre_upgrade_snapshot" {
   depends_on = [terraform_data.wait_for_cluster_ready]
 
   # Re-run when RKE2 version changes
-  triggers_replace = [var.rke2_version]
+  triggers_replace = [var.kubernetes_version]
 
   connection {
     type        = "ssh"
-    host        = hcloud_server.master[0].ipv4_address
+    host        = hcloud_server.initial_control_plane[0].ipv4_address
     user        = "root"
-    private_key = tls_private_key.machines.private_key_openssh
+    private_key = tls_private_key.ssh_identity.private_key_openssh
     timeout     = "5m"
   }
 
@@ -223,13 +223,13 @@ resource "terraform_data" "cluster_health_check" {
   depends_on = [terraform_data.wait_for_cluster_ready]
 
   # Re-run when RKE2 version changes (triggers health check after upgrade)
-  triggers_replace = [var.rke2_version]
+  triggers_replace = [var.kubernetes_version]
 
   connection {
     type        = "ssh"
-    host        = hcloud_server.master[0].ipv4_address
+    host        = hcloud_server.initial_control_plane[0].ipv4_address
     user        = "root"
-    private_key = tls_private_key.machines.private_key_openssh
+    private_key = tls_private_key.ssh_identity.private_key_openssh
     timeout     = "15m"
   }
 
@@ -241,7 +241,7 @@ resource "terraform_data" "cluster_health_check" {
       #      unexpectedly minimal PATH, causing basic utilities (grep/date/wc)
       #      to be "not found" and failing health checks spuriously.
       "export PATH=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/lib/rancher/rke2/bin\"",
-      "EXPECTED=${var.master_node_count + var.worker_node_count}",
+      "EXPECTED=${var.control_plane_count + var.agent_node_count}",
       "TIMEOUT=900",
       "ELAPSED=0",
       "echo '=== Cluster Health Check ==='",

@@ -8,31 +8,47 @@
 
 locals {
   # --- Kubeconfig parsing ---
-  # DECISION: Parse kubeconfig inline with yamldecode + base64decode.
-  # Why: Avoids external tools (yq, jq) and keeps everything in the Terraform graph.
-  #      Empty-string guards prevent errors when kubeconfig is not yet available
-  #      (e.g., during initial plan before any apply).
-  cluster_ca   = data.remote_file.kubeconfig.content == "" ? "" : base64decode(yamldecode(data.remote_file.kubeconfig.content).clusters[0].cluster.certificate-authority-data)
-  client_key   = data.remote_file.kubeconfig.content == "" ? "" : base64decode(yamldecode(data.remote_file.kubeconfig.content).users[0].user.client-key-data)
-  client_cert  = data.remote_file.kubeconfig.content == "" ? "" : base64decode(yamldecode(data.remote_file.kubeconfig.content).users[0].user.client-certificate-data)
+  # DECISION: Decode kubeconfig via try() + lookup() for resilient parsing.
+  # Why: During initial plan (before any apply), kubeconfig content is empty.
+  #      Using try() with fallback avoids errors for every parsed field without
+  #      repeating the `== "" ? "" :` guard on each line. The intermediate
+  #      `parsed_kubeconfig` local captures the YAML once and subsequent lookups
+  #      navigate the parsed structure safely.
+  raw_kubeconfig    = data.remote_file.kubeconfig.content
+  parsed_kubeconfig = try(yamldecode(local.raw_kubeconfig), {})
+
+  cluster_ca = try(
+    base64decode(local.parsed_kubeconfig.clusters[0].cluster["certificate-authority-data"]),
+    ""
+  )
+  client_cert = try(
+    base64decode(local.parsed_kubeconfig.users[0].user["client-certificate-data"]),
+    ""
+  )
+  client_key = try(
+    base64decode(local.parsed_kubeconfig.users[0].user["client-key-data"]),
+    ""
+  )
+
+  # Rewrite 127.0.0.1 → LB IP so the kubeconfig works from outside the cluster.
   cluster_host = "https://${hcloud_load_balancer.control_plane.ipv4}:6443"
-  kube_config  = replace(data.remote_file.kubeconfig.content, "https://127.0.0.1:6443", local.cluster_host)
+  kube_config  = replace(local.raw_kubeconfig, "https://127.0.0.1:6443", local.cluster_host)
 
-  is_ha_cluster = var.master_node_count >= 3
+  # --- HA detection ---
+  is_ha_cluster = var.control_plane_count >= 3
 
-  # DECISION: Auto-detect Hetzner Object Storage endpoint from lb_location.
+  # --- etcd S3 backup endpoint auto-detection ---
+  # DECISION: Auto-detect Hetzner Object Storage endpoint from load_balancer_location.
   # Why: Reduces configuration burden — operator only needs bucket + credentials.
   # Hetzner endpoints follow pattern: {location}.your-objectstorage.com.
   # See: https://docs.hetzner.com/storage/object-storage/overview
-  etcd_s3_endpoint = (
-    trimspace(var.etcd_backup.s3_endpoint) != ""
-    ? var.etcd_backup.s3_endpoint
-    : "${var.lb_location}.your-objectstorage.com"
+  etcd_s3_endpoint = coalesce(
+    trimspace(var.etcd_backup.s3_endpoint),
+    "${var.load_balancer_location}.your-objectstorage.com"
   )
 
-  etcd_s3_folder = (
-    trimspace(var.etcd_backup.s3_folder) != ""
-    ? var.etcd_backup.s3_folder
-    : var.cluster_name
+  etcd_s3_folder = coalesce(
+    trimspace(var.etcd_backup.s3_folder),
+    var.rke2_cluster_name
   )
 }

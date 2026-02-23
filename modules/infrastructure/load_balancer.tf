@@ -32,6 +32,42 @@
 #   dev/staging environments.
 # ──────────────────────────────────────────────────────────────────────────────
 
+locals {
+  # Pre-compute health check parameters once; reused across all LB services.
+  # DECISION: Unified health check timing across all services.
+  # Why: Simplifies monitoring and makes health check behavior predictable.
+  #      Different timings per service would complicate debugging and alerting.
+  hc_interval_sec = 15
+  hc_timeout_sec  = 10
+  hc_retries      = 3
+
+  # Standard lb11 type for both LBs — sufficient for most workloads.
+  lb_type = "lb11"
+
+  # Control plane LB service definitions (port → config).
+  # DECISION: Define services as a map for clarity and self-documentation.
+  cp_services = {
+    k8s_api = {
+      listen_port      = 6443
+      destination_port = 6443
+      health_protocol  = "http"
+      health_port      = 6443
+      http_health = {
+        path         = "/healthz"
+        tls          = true
+        status_codes = ["200", "401"]
+      }
+    }
+    registration = {
+      listen_port      = 9345
+      destination_port = 9345
+      health_protocol  = "tcp"
+      health_port      = 9345
+      http_health      = null
+    }
+  }
+}
+
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  LB-1: Control Plane (K8s API + node registration)                        ║
 # ║  Targets: Master nodes only                                               ║
@@ -39,57 +75,64 @@
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 resource "hcloud_load_balancer" "control_plane" {
-  name               = "${var.cluster_name}-cp-lb"
-  load_balancer_type = "lb11"
-  location           = var.lb_location
+  name               = "${var.rke2_cluster_name}-cp-lb"
+  load_balancer_type = local.lb_type
+  location           = var.load_balancer_location
+
   labels = {
-    "rke2" = "control-plane"
+    "rke2"         = "control-plane"
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
   }
 }
 
 resource "hcloud_load_balancer_network" "control_plane_network" {
   load_balancer_id = hcloud_load_balancer.control_plane.id
-  subnet_id        = hcloud_network_subnet.main.id
+  subnet_id        = hcloud_network_subnet.nodes.id
 }
 
 # Initial master target — added immediately after master[0] is created
 resource "hcloud_load_balancer_target" "cp_initial_master" {
-  type             = "server"
   load_balancer_id = hcloud_load_balancer.control_plane.id
-  server_id        = hcloud_server.master[0].id
+  type             = "server"
+  server_id        = hcloud_server.initial_control_plane[0].id
   use_private_ip   = true
-  depends_on       = [hcloud_load_balancer_network.control_plane_network]
+
+  depends_on = [hcloud_load_balancer_network.control_plane_network]
 }
 
 # Additional master targets
 resource "hcloud_load_balancer_target" "cp_additional_masters" {
-  count            = var.master_node_count > 1 ? var.master_node_count - 1 : 0
-  type             = "server"
+  count = var.control_plane_count > 1 ? var.control_plane_count - 1 : 0
+
   load_balancer_id = hcloud_load_balancer.control_plane.id
-  server_id        = hcloud_server.additional_masters[count.index].id
+  type             = "server"
+  server_id        = hcloud_server.control_plane[count.index].id
   use_private_ip   = true
-  depends_on       = [hcloud_load_balancer_network.control_plane_network]
+
+  depends_on = [hcloud_load_balancer_network.control_plane_network]
 }
 
 # K8s API service (6443) — HTTP health check against /healthz
 resource "hcloud_load_balancer_service" "cp_k8s_api" {
   load_balancer_id = hcloud_load_balancer.control_plane.id
   protocol         = "tcp"
-  listen_port      = 6443
-  destination_port = 6443
-  depends_on       = [hcloud_load_balancer_target.cp_initial_master]
+  listen_port      = local.cp_services.k8s_api.listen_port
+  destination_port = local.cp_services.k8s_api.destination_port
+
+  depends_on = [hcloud_load_balancer_target.cp_initial_master]
 
   health_check {
-    protocol = "http"
-    port     = 6443
-    interval = 15
-    timeout  = 10
-    retries  = 3
+    protocol = local.cp_services.k8s_api.health_protocol
+    port     = local.cp_services.k8s_api.health_port
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
 
     http {
-      path         = "/healthz"
-      tls          = true
-      status_codes = ["200", "401"]
+      path         = local.cp_services.k8s_api.http_health.path
+      tls          = local.cp_services.k8s_api.http_health.tls
+      status_codes = local.cp_services.k8s_api.http_health.status_codes
     }
   }
 }
@@ -99,34 +142,37 @@ resource "hcloud_load_balancer_service" "cp_k8s_api" {
 resource "hcloud_load_balancer_service" "cp_register" {
   load_balancer_id = hcloud_load_balancer.control_plane.id
   protocol         = "tcp"
-  listen_port      = 9345
-  destination_port = 9345
-  depends_on       = [hcloud_load_balancer_target.cp_initial_master]
+  listen_port      = local.cp_services.registration.listen_port
+  destination_port = local.cp_services.registration.destination_port
+
+  depends_on = [hcloud_load_balancer_target.cp_initial_master]
 
   health_check {
-    protocol = "tcp"
-    port     = 9345
-    interval = 15
-    timeout  = 10
-    retries  = 3
+    protocol = local.cp_services.registration.health_protocol
+    port     = local.cp_services.registration.health_port
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
   }
 }
 
 # SSH via control-plane LB — opt-in, for debugging only
 resource "hcloud_load_balancer_service" "cp_ssh" {
-  count            = var.enable_ssh_on_lb ? 1 : 0
+  count = var.enable_ssh_on_lb ? 1 : 0
+
   load_balancer_id = hcloud_load_balancer.control_plane.id
   protocol         = "tcp"
   listen_port      = 22
   destination_port = 22
-  depends_on       = [hcloud_load_balancer_target.cp_initial_master]
+
+  depends_on = [hcloud_load_balancer_target.cp_initial_master]
 
   health_check {
     protocol = "tcp"
     port     = 22
-    interval = 15
-    timeout  = 10
-    retries  = 3
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
   }
 }
 
@@ -138,81 +184,100 @@ resource "hcloud_load_balancer_service" "cp_ssh" {
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 resource "hcloud_load_balancer" "ingress" {
-  count              = var.harmony_enabled ? 1 : 0
-  name               = "${var.cluster_name}-ingress-lb"
-  load_balancer_type = "lb11"
-  location           = var.lb_location
+  count = var.harmony_enabled ? 1 : 0
+
+  name               = "${var.rke2_cluster_name}-ingress-lb"
+  load_balancer_type = local.lb_type
+  location           = var.load_balancer_location
+
   labels = {
-    "rke2" = "ingress"
+    "rke2"         = "ingress"
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
   }
 }
 
 resource "hcloud_load_balancer_network" "ingress_network" {
-  count            = var.harmony_enabled ? 1 : 0
+  count = var.harmony_enabled ? 1 : 0
+
   load_balancer_id = hcloud_load_balancer.ingress[0].id
-  subnet_id        = hcloud_network_subnet.main.id
+  subnet_id        = hcloud_network_subnet.nodes.id
 }
 
 # Worker targets — ingress-nginx runs as DaemonSet with hostPort on workers
 resource "hcloud_load_balancer_target" "ingress_workers" {
-  count            = var.harmony_enabled ? var.worker_node_count : 0
-  type             = "server"
+  count = var.harmony_enabled ? var.agent_node_count : 0
+
   load_balancer_id = hcloud_load_balancer.ingress[0].id
-  server_id        = hcloud_server.worker[count.index].id
+  type             = "server"
+  server_id        = hcloud_server.agent[count.index].id
   use_private_ip   = true
-  depends_on       = [hcloud_load_balancer_network.ingress_network]
+
+  depends_on = [hcloud_load_balancer_network.ingress_network]
 }
 
-# HTTP service (80)
-resource "hcloud_load_balancer_service" "ingress_http" {
-  count            = var.harmony_enabled ? 1 : 0
-  load_balancer_id = hcloud_load_balancer.ingress[0].id
-  protocol         = "tcp"
-  listen_port      = 80
-  destination_port = 80
-  depends_on       = [hcloud_load_balancer_target.ingress_workers]
-
-  health_check {
-    protocol = "tcp"
-    port     = 80
-    interval = 15
-    timeout  = 10
-    retries  = 3
+# HTTP + HTTPS services — defined as a map to reduce repetition
+locals {
+  ingress_services = {
+    http  = 80
+    https = 443
   }
 }
 
-# HTTPS service (443)
-resource "hcloud_load_balancer_service" "ingress_https" {
-  count            = var.harmony_enabled ? 1 : 0
+resource "hcloud_load_balancer_service" "ingress_http" {
+  count = var.harmony_enabled ? 1 : 0
+
   load_balancer_id = hcloud_load_balancer.ingress[0].id
   protocol         = "tcp"
-  listen_port      = 443
-  destination_port = 443
-  depends_on       = [hcloud_load_balancer_target.ingress_workers]
+  listen_port      = local.ingress_services.http
+  destination_port = local.ingress_services.http
+
+  depends_on = [hcloud_load_balancer_target.ingress_workers]
 
   health_check {
     protocol = "tcp"
-    port     = 443
-    interval = 15
-    timeout  = 10
-    retries  = 3
+    port     = local.ingress_services.http
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
+  }
+}
+
+resource "hcloud_load_balancer_service" "ingress_https" {
+  count = var.harmony_enabled ? 1 : 0
+
+  load_balancer_id = hcloud_load_balancer.ingress[0].id
+  protocol         = "tcp"
+  listen_port      = local.ingress_services.https
+  destination_port = local.ingress_services.https
+
+  depends_on = [hcloud_load_balancer_target.ingress_workers]
+
+  health_check {
+    protocol = "tcp"
+    port     = local.ingress_services.https
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
   }
 }
 
 # Additional custom ports on the ingress LB
 resource "hcloud_load_balancer_service" "ingress_custom" {
-  for_each         = var.harmony_enabled ? toset([for p in var.additional_lb_service_ports : tostring(p)]) : toset([])
+  for_each = var.harmony_enabled ? toset([for p in var.extra_lb_ports : tostring(p)]) : toset([])
+
   load_balancer_id = hcloud_load_balancer.ingress[0].id
   protocol         = "tcp"
   listen_port      = tonumber(each.value)
   destination_port = tonumber(each.value)
-  depends_on       = [hcloud_load_balancer_target.ingress_workers]
+
+  depends_on = [hcloud_load_balancer_target.ingress_workers]
 
   health_check {
     protocol = "tcp"
     port     = tonumber(each.value)
-    interval = 15
-    timeout  = 10
-    retries  = 3
+    interval = local.hc_interval_sec
+    timeout  = local.hc_timeout_sec
+    retries  = local.hc_retries
   }
 }
