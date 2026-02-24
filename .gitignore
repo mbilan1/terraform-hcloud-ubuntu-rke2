@@ -32,3 +32,6 @@ override.tf.json
 kubeconfig.yaml
 
 .vscode/*
+
+# Python virtual environment (used for compliance tooling: copydetect, etc.)
+.venv/
