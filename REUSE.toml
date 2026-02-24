@@ -75,3 +75,21 @@ SPDX-License-Identifier = "MIT"
 path = "AGENTS.md"
 SPDX-FileCopyrightText = "2026 Maksym Bilan"
 SPDX-License-Identifier = "MIT"
+
+# ─── NOTICE file (upstream acknowledgement) ───
+# DECISION: The NOTICE file references upstream work, so it carries both MIT
+# (for our content) and LicenseRef-MIT-upstream-wenzel-felix (to mark the
+# upstream licence as "used" for REUSE compliance).
+[[annotations]]
+path = "NOTICE"
+SPDX-FileCopyrightText = "2026 Maksym Bilan"
+SPDX-License-Identifier = "MIT AND LicenseRef-MIT-upstream-wenzel-felix"
+
+# ─── Upstream license preservation ───
+# DECISION: Kept as LicenseRef-MIT-upstream-wenzel-felix to satisfy REUSE custom
+# license naming convention (LicenseRef- prefix). The file is an unmodified copy
+# of the upstream MIT license for attribution purposes.
+[[annotations]]
+path = "LICENSES/LicenseRef-MIT-upstream-wenzel-felix.txt"
+SPDX-FileCopyrightText = "2023 wenzel-felix"
+SPDX-License-Identifier = "LicenseRef-MIT-upstream-wenzel-felix"
