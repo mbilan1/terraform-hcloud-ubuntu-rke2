@@ -460,7 +460,7 @@ variable "master_node_locations" {
 }
 
 variable "master_node_server_type" {
-  description = "Hetzner Cloud server type for control-plane nodes (e.g. 'cx22', 'cx32', 'cx42')."
+  description = "Hetzner Cloud server type for control-plane nodes (e.g. 'cx23', 'cx33', 'cx43')."
   type        = string
   nullable    = false
   default     = "cx23"
@@ -585,7 +585,7 @@ variable "worker_node_locations" {
 }
 
 variable "worker_node_server_type" {
-  description = "Hetzner Cloud server type for worker nodes (e.g. 'cx22', 'cx32', 'cx42')."
+  description = "Hetzner Cloud server type for worker nodes (e.g. 'cx23', 'cx33', 'cx43')."
   type        = string
   nullable    = false
   default     = "cx23"

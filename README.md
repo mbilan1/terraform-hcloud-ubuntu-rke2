@@ -223,7 +223,7 @@ No resources.
 | <a name="input_load_balancer_location"></a> [load\_balancer\_location](#input\_load\_balancer\_location) | Hetzner datacenter location where both load balancers will be provisioned (e.g. 'hel1', 'nbg1', 'fsn1') | `string` | `"hel1"` | no |
 | <a name="input_master_node_image"></a> [master\_node\_image](#input\_master\_node\_image) | OS image identifier for control-plane servers (e.g. 'ubuntu-24.04') | `string` | `"ubuntu-24.04"` | no |
 | <a name="input_master_node_locations"></a> [master\_node\_locations](#input\_master\_node\_locations) | Optional list of Hetzner locations to place control-plane nodes. If empty, node\_locations is used. Why: allows masters spread across multiple cities while keeping workers in a subset (e.g., Germany-only). | `list(string)` | `[]` | no |
-| <a name="input_master_node_server_type"></a> [master\_node\_server\_type](#input\_master\_node\_server\_type) | Hetzner Cloud server type for control-plane nodes (e.g. 'cx22', 'cx32', 'cx42'). | `string` | `"cx23"` | no |
+| <a name="input_master_node_server_type"></a> [master\_node\_server\_type](#input\_master\_node\_server\_type) | Hetzner Cloud server type for control-plane nodes (e.g. 'cx23', 'cx33', 'cx43'). | `string` | `"cx23"` | no |
 | <a name="input_nginx_ingress_proxy_body_size"></a> [nginx\_ingress\_proxy\_body\_size](#input\_nginx\_ingress\_proxy\_body\_size) | Default max request body size for the nginx ingress controller. Set to 100m for Harmony/Open edX compatibility (course uploads). | `string` | `"100m"` | no |
 | <a name="input_node_locations"></a> [node\_locations](#input\_node\_locations) | (Deprecated) Fallback placement locations when master\_node\_locations/worker\_node\_locations are unset. All entries must share the same network zone. | `list(string)` | <pre>[<br/>  "hel1",<br/>  "nbg1",<br/>  "fsn1"<br/>]</pre> | no |
 | <a name="input_rke2_cluster_name"></a> [rke2\_cluster\_name](#input\_rke2\_cluster\_name) | Identifier prefix for all provisioned resources (servers, load balancers, network, firewall rules). Must be lowercase alphanumeric, max 20 characters. | `string` | `"rke2"` | no |
@@ -233,7 +233,7 @@ No resources.
 | <a name="input_subnet_address"></a> [subnet\_address](#input\_subnet\_address) | Subnet allocation for cluster nodes in CIDR notation. Must fall within the hcloud\_network\_cidr range. | `string` | `"10.0.1.0/24"` | no |
 | <a name="input_worker_node_image"></a> [worker\_node\_image](#input\_worker\_node\_image) | OS image identifier for agent (worker) servers | `string` | `"ubuntu-24.04"` | no |
 | <a name="input_worker_node_locations"></a> [worker\_node\_locations](#input\_worker\_node\_locations) | Optional list of Hetzner locations to place worker nodes. If empty, node\_locations is used. Why: lets you keep workload I/O local (e.g., Germany-only) while masters can span more regions. | `list(string)` | `[]` | no |
-| <a name="input_worker_node_server_type"></a> [worker\_node\_server\_type](#input\_worker\_node\_server\_type) | Hetzner Cloud server type for worker nodes (e.g. 'cx22', 'cx32', 'cx42'). | `string` | `"cx23"` | no |
+| <a name="input_worker_node_server_type"></a> [worker\_node\_server\_type](#input\_worker\_node\_server\_type) | Hetzner Cloud server type for worker nodes (e.g. 'cx23', 'cx33', 'cx43'). | `string` | `"cx23"` | no |
 ### Outputs
 
 | Name | Description |
