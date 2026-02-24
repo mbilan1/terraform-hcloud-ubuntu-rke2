@@ -17,8 +17,8 @@ check "workers_must_not_mix_countries" {
     #       module defaults/backward compatibility intact.
     condition = (
       !var.enforce_single_country_workers || (
-        alltrue([for l in local.effective_worker_node_locations : l == "hel1"]) ||
-        alltrue([for l in local.effective_worker_node_locations : contains(["nbg1", "fsn1"], l)])
+        alltrue([for l in local.effective_worker_locations : l == "hel1"]) ||
+        alltrue([for l in local.effective_worker_locations : contains(["nbg1", "fsn1"], l)])
       )
     )
     error_message = "Workers must be Finland-only (hel1) or Germany-only (nbg1/fsn1) when enforce_single_country_workers=true. Do not mix hel1 with nbg1/fsn1 for workers."
@@ -113,7 +113,7 @@ check "etcd_backup_requires_s3_config" {
   }
 }
 
-check "rke2_version_format_when_pinned" {
+check "kubernetes_version_format_when_pinned" {
   assert {
     # Reproducibility compromise:
     # - Empty value is still allowed for usability (installs latest stable).
@@ -122,10 +122,10 @@ check "rke2_version_format_when_pinned" {
     # Rejected for now to avoid breaking existing consumers; stricter policy can
     # be introduced later as an explicit opt-in/major-version change.
     condition = (
-      trimspace(var.rke2_version) == "" ||
-      can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+\\+rke2r[0-9]+$", var.rke2_version))
+      trimspace(var.kubernetes_version) == "" ||
+      can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+\\+rke2r[0-9]+$", var.kubernetes_version))
     )
-    error_message = "rke2_version must be empty or match format like v1.31.6+rke2r1."
+    error_message = "kubernetes_version must be empty or match format like v1.31.6+rke2r1."
   }
 }
 
@@ -179,9 +179,9 @@ check "longhorn_minimum_workers" {
   assert {
     condition = (
       !var.cluster_configuration.longhorn.preinstall ||
-      var.worker_node_count >= var.cluster_configuration.longhorn.replica_count
+      var.agent_node_count >= var.cluster_configuration.longhorn.replica_count
     )
-    error_message = "Longhorn replica_count requires at least that many worker nodes (worker_node_count >= replica_count)."
+    error_message = "Longhorn replica_count requires at least that many worker nodes (agent_node_count >= replica_count)."
   }
 }
 
@@ -202,8 +202,8 @@ check "harmony_requires_cert_manager" {
 
 check "harmony_requires_workers_for_lb" {
   assert {
-    condition     = !var.harmony.enabled || var.worker_node_count > 0
-    error_message = "Harmony routes HTTP/HTTPS through worker node targets on the ingress LB. Set worker_node_count >= 1 when harmony.enabled = true, or traffic will not reach ingress-nginx."
+    condition     = !var.harmony.enabled || var.agent_node_count > 0
+    error_message = "Harmony routes HTTP/HTTPS through worker node targets on the ingress LB. Set agent_node_count >= 1 when harmony.enabled = true, or traffic will not reach ingress-nginx."
   }
 }
 
@@ -216,7 +216,7 @@ check "harmony_requires_workers_for_lb" {
 # because rebooting/upgrading a single control-plane node causes full downtime.
 check "auto_updates_require_ha" {
   assert {
-    condition     = var.master_node_count >= 3 || (!var.enable_auto_os_updates && !var.enable_auto_kubernetes_updates)
-    error_message = "enable_auto_os_updates and enable_auto_kubernetes_updates have no effect on non-HA clusters (master_node_count < 3). Kured and System Upgrade Controller are only deployed on HA clusters."
+    condition     = var.control_plane_count >= 3 || (!var.enable_auto_os_updates && !var.enable_auto_kubernetes_updates)
+    error_message = "enable_auto_os_updates and enable_auto_kubernetes_updates have no effect on non-HA clusters (control_plane_count < 3). Kured and System Upgrade Controller are only deployed on HA clusters."
   }
 }

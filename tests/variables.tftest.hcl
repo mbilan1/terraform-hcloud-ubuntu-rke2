@@ -86,8 +86,9 @@ run "defaults_pass_validation" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token-for-testing"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token-for-testing"
+    domain           = "test.example.com"
   }
 }
 
@@ -98,200 +99,216 @@ run "domain_rejects_empty_string" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = ""
+    cluster_domain   = ""
+    hcloud_api_token = "mock-token"
+    domain           = ""
   }
 
-  expect_failures = [var.domain]
+  expect_failures = [var.cluster_domain]
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V03: master_node_count — rejects 2 (split-brain)                      ║
+# ║  UT-V03: control_plane_count — rejects 2 (split-brain)                      ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "master_count_rejects_two" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    master_node_count = 2
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 2
   }
 
-  expect_failures = [var.master_node_count]
+  expect_failures = [var.control_plane_count]
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V04: master_node_count — accepts 1 (non-HA)                           ║
+# ║  UT-V04: control_plane_count — accepts 1 (non-HA)                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "master_count_accepts_one" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    master_node_count = 1
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 1
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V05: master_node_count — accepts 3 (HA)                               ║
+# ║  UT-V05: control_plane_count — accepts 3 (HA)                               ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "master_count_accepts_three" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    master_node_count = 3
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 3
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V06: master_node_count — accepts 5 (large HA)                         ║
+# ║  UT-V06: control_plane_count — accepts 5 (large HA)                         ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "master_count_accepts_five" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 5
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-V07: rke2_cluster_name — rejects invalid characters                        ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "rke2_cluster_name_rejects_uppercase" {
+  command = plan
+
+  variables {
+    cluster_domain    = "example.com"
+    hcloud_api_token  = "mock-token"
     domain            = "test.example.com"
-    master_node_count = 5
+    rke2_cluster_name = "MyCluster"
+  }
+
+  expect_failures = [var.rke2_cluster_name]
+}
+
+run "rke2_cluster_name_rejects_hyphens" {
+  command = plan
+
+  variables {
+    cluster_domain    = "example.com"
+    hcloud_api_token  = "mock-token"
+    domain            = "test.example.com"
+    rke2_cluster_name = "my-cluster"
+  }
+
+  expect_failures = [var.rke2_cluster_name]
+}
+
+run "rke2_cluster_name_rejects_too_long" {
+  command = plan
+
+  variables {
+    cluster_domain    = "example.com"
+    hcloud_api_token  = "mock-token"
+    domain            = "test.example.com"
+    rke2_cluster_name = "aaaaabbbbbcccccddddde"
+  }
+
+  expect_failures = [var.rke2_cluster_name]
+}
+
+run "rke2_cluster_name_accepts_valid" {
+  command = plan
+
+  variables {
+    cluster_domain    = "example.com"
+    hcloud_api_token  = "mock-token"
+    domain            = "test.example.com"
+    rke2_cluster_name = "prod01"
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V07: cluster_name — rejects invalid characters                        ║
+# ║  UT-V08: cni_plugin — rejects invalid value                                 ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "cluster_name_rejects_uppercase" {
+run "cni_plugin_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    cluster_name  = "MyCluster"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    cni_plugin       = "flannel"
   }
 
-  expect_failures = [var.cluster_name]
+  expect_failures = [var.cni_plugin]
 }
 
-run "cluster_name_rejects_hyphens" {
+run "cni_plugin_accepts_cilium" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    cluster_name  = "my-cluster"
-  }
-
-  expect_failures = [var.cluster_name]
-}
-
-run "cluster_name_rejects_too_long" {
-  command = plan
-
-  variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    cluster_name  = "aaaaabbbbbcccccddddde"
-  }
-
-  expect_failures = [var.cluster_name]
-}
-
-run "cluster_name_accepts_valid" {
-  command = plan
-
-  variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    cluster_name  = "prod01"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    cni_plugin       = "cilium"
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V08: rke2_cni — rejects invalid value                                 ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "rke2_cni_rejects_invalid" {
-  command = plan
-
-  variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    rke2_cni      = "flannel"
-  }
-
-  expect_failures = [var.rke2_cni]
-}
-
-run "rke2_cni_accepts_cilium" {
-  command = plan
-
-  variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    rke2_cni      = "cilium"
-  }
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V09: additional_lb_service_ports — rejects out-of-range ports          ║
+# ║  UT-V09: extra_lb_ports — rejects out-of-range ports          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "lb_ports_rejects_zero" {
   command = plan
 
   variables {
-    hetzner_token               = "mock-token"
-    domain                      = "test.example.com"
-    additional_lb_service_ports = [0]
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    extra_lb_ports   = [0]
   }
 
-  expect_failures = [var.additional_lb_service_ports]
+  expect_failures = [var.extra_lb_ports]
 }
 
 run "lb_ports_rejects_too_large" {
   command = plan
 
   variables {
-    hetzner_token               = "mock-token"
-    domain                      = "test.example.com"
-    additional_lb_service_ports = [65536]
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    extra_lb_ports   = [65536]
   }
 
-  expect_failures = [var.additional_lb_service_ports]
+  expect_failures = [var.extra_lb_ports]
 }
 
 run "lb_ports_accepts_valid" {
   command = plan
 
   variables {
-    hetzner_token               = "mock-token"
-    domain                      = "test.example.com"
-    additional_lb_service_ports = [8080, 8443]
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    extra_lb_ports   = [8080, 8443]
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-V10: network_address — rejects invalid CIDR                            ║
+# ║  UT-V10: hcloud_network_cidr — rejects invalid CIDR                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "network_address_rejects_invalid" {
+run "hcloud_network_cidr_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token   = "mock-token"
-    domain          = "test.example.com"
-    network_address = "not-a-cidr"
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    hcloud_network_cidr = "not-a-cidr"
   }
 
-  expect_failures = [var.network_address]
+  expect_failures = [var.hcloud_network_cidr]
 }
 
-run "network_address_accepts_valid" {
+run "hcloud_network_cidr_accepts_valid" {
   command = plan
 
   variables {
-    hetzner_token   = "mock-token"
-    domain          = "test.example.com"
-    network_address = "172.16.0.0/12"
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    hcloud_network_cidr = "172.16.0.0/12"
   }
 }
 
@@ -302,9 +319,10 @@ run "subnet_address_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token  = "mock-token"
-    domain         = "test.example.com"
-    subnet_address = "999.999.999.0/24"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    subnet_address   = "999.999.999.0/24"
   }
 
   expect_failures = [var.subnet_address]
@@ -317,8 +335,9 @@ run "reclaim_policy_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       hcloud_csi = {
         reclaim_policy = "Recycle"
@@ -333,8 +352,9 @@ run "reclaim_policy_accepts_retain" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       hcloud_csi = {
         reclaim_policy = "Retain"
@@ -350,7 +370,8 @@ run "ssh_cidrs_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
+    cluster_domain    = "example.com"
+    hcloud_api_token  = "mock-token"
     domain            = "test.example.com"
     ssh_allowed_cidrs = ["not-a-cidr"]
   }
@@ -365,7 +386,8 @@ run "k8s_api_cidrs_rejects_empty" {
   command = plan
 
   variables {
-    hetzner_token         = "mock-token"
+    cluster_domain        = "example.com"
+    hcloud_api_token      = "mock-token"
     domain                = "test.example.com"
     k8s_api_allowed_cidrs = []
   }
@@ -377,7 +399,8 @@ run "k8s_api_cidrs_rejects_invalid" {
   command = plan
 
   variables {
-    hetzner_token         = "mock-token"
+    cluster_domain        = "example.com"
+    hcloud_api_token      = "mock-token"
     domain                = "test.example.com"
     k8s_api_allowed_cidrs = ["192.168.1.0/24", "garbage"]
   }

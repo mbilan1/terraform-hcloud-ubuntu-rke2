@@ -41,7 +41,7 @@ variable "worker_node_names" {
 # ║  Root passthrough — user-facing configuration                              ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-variable "hetzner_token" {
+variable "hcloud_api_token" {
   description = "Hetzner Cloud API token (for hcloud secrets)"
   type        = string
   sensitive   = true
@@ -101,7 +101,7 @@ variable "harmony" {
   })
 }
 
-variable "domain" {
+variable "cluster_domain" {
   description = "Domain for the cluster (used in Harmony values)"
   type        = string
 }
@@ -163,22 +163,22 @@ variable "allow_remote_manifest_downloads" {
   type        = bool
 }
 
-variable "rke2_version" {
+variable "kubernetes_version" {
   description = "RKE2 version — used as health check trigger"
   type        = string
 }
 
-variable "worker_node_count" {
+variable "agent_node_count" {
   description = "Number of worker nodes (for Longhorn labels count)"
   type        = number
 }
 
-variable "master_node_count" {
+variable "control_plane_count" {
   description = "Number of master nodes (for is_ha_cluster computation)"
   type        = number
 }
 
-variable "lb_location" {
+variable "load_balancer_location" {
   description = "LB location (for Longhorn S3 endpoint auto-detection)"
   type        = string
 }

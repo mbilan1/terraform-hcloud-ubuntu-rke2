@@ -4,8 +4,23 @@
 resource "kubectl_manifest" "ingress_configuration" {
   count      = var.harmony.enabled ? 0 : 1
   depends_on = [terraform_data.wait_for_infrastructure]
-  yaml_body = templatefile("${path.module}/templates/values/ingress_controller.yaml", {
-    enable_modsecurity = var.enable_nginx_modsecurity_waf
-    proxy_body_size    = var.nginx_ingress_proxy_body_size
+  yaml_body = yamlencode({
+    apiVersion = "helm.cattle.io/v1"
+    kind       = "HelmChartConfig"
+    metadata = {
+      name      = "rke2-ingress-nginx"
+      namespace = "kube-system"
+    }
+    spec = {
+      valuesContent = join("\n", compact([
+        "controller:",
+        "  config:",
+        "    proxy-body-size: \"${var.nginx_ingress_proxy_body_size}\"",
+        var.enable_nginx_modsecurity_waf ? "    enable-modsecurity: \"true\"" : "",
+        var.enable_nginx_modsecurity_waf ? "    enable-owasp-modsecurity-crs: \"true\"" : "",
+        var.enable_nginx_modsecurity_waf ? "    modsecurity-snippet: |-" : "",
+        var.enable_nginx_modsecurity_waf ? "      SecRuleEngine On" : ""
+      ]))
+    }
   })
 }

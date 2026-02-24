@@ -79,8 +79,9 @@ run "harmony_disabled_no_ingress_lb" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     harmony = {
       enabled = false
     }
@@ -114,9 +115,10 @@ run "harmony_enabled_creates_ingress_lb" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 3
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 3
     harmony = {
       enabled = true
     }
@@ -150,9 +152,10 @@ run "harmony_disables_builtin_ingress" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 3
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 3
     harmony = {
       enabled = true
     }
@@ -171,8 +174,9 @@ run "harmony_disabled_uses_builtin_ingress" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     harmony = {
       enabled = false
     }
@@ -191,14 +195,15 @@ run "single_master_no_additional" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    master_node_count = 1
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 1
   }
 
   assert {
     condition     = module.infrastructure._test_counts.additional_masters == 0
-    error_message = "No additional masters should be created when master_node_count = 1."
+    error_message = "No additional masters should be created when control_plane_count = 1."
   }
 
   assert {
@@ -214,9 +219,10 @@ run "ha_cluster_creates_additional_masters" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    master_node_count = 5
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "test.example.com"
+    control_plane_count = 5
   }
 
   assert {
@@ -232,14 +238,15 @@ run "zero_workers" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 0
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 0
   }
 
   assert {
     condition     = module.infrastructure._test_counts.workers == 0
-    error_message = "No worker nodes should be created when worker_node_count = 0."
+    error_message = "No worker nodes should be created when agent_node_count = 0."
   }
 }
 
@@ -250,14 +257,15 @@ run "workers_correct_count" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 5
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 5
   }
 
   assert {
     condition     = module.infrastructure._test_counts.workers == 5
-    error_message = "Worker count must match worker_node_count."
+    error_message = "Worker count must match agent_node_count."
   }
 }
 
@@ -268,8 +276,9 @@ run "ssh_on_lb_disabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -285,7 +294,8 @@ run "ssh_on_lb_enabled" {
   command = plan
 
   variables {
-    hetzner_token    = "mock-token"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
     domain           = "test.example.com"
     enable_ssh_on_lb = true
   }
@@ -303,8 +313,9 @@ run "certmanager_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       cert_manager = {
         preinstall = false
@@ -330,8 +341,9 @@ run "certmanager_enabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -352,8 +364,9 @@ run "hccm_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       hcloud_controller = {
         preinstall = false
@@ -379,8 +392,9 @@ run "csi_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       hcloud_csi = {
         preinstall = false
@@ -395,14 +409,15 @@ run "csi_disabled" {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-C15: generate_ssh_key_file — disabled by default                       ║
+# ║  UT-C15: save_ssh_key_locally — disabled by default                       ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "ssh_key_file_disabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -412,20 +427,21 @@ run "ssh_key_file_disabled_by_default" {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-C16: generate_ssh_key_file — enabled creates file                      ║
+# ║  UT-C16: save_ssh_key_locally — enabled creates file                      ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "ssh_key_file_enabled" {
   command = plan
 
   variables {
-    hetzner_token         = "mock-token"
-    domain                = "test.example.com"
-    generate_ssh_key_file = true
+    cluster_domain       = "example.com"
+    hcloud_api_token     = "mock-token"
+    domain               = "test.example.com"
+    save_ssh_key_locally = true
   }
 
   assert {
     condition     = module.infrastructure._test_counts.ssh_key_file == 1
-    error_message = "SSH key file must be generated when generate_ssh_key_file = true."
+    error_message = "SSH key file must be generated when save_ssh_key_locally = true."
   }
 }
 
@@ -436,8 +452,9 @@ run "dns_disabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -453,9 +470,10 @@ run "ingress_lb_targets_match_workers" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 4
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 4
     harmony = {
       enabled = true
     }
@@ -463,7 +481,7 @@ run "ingress_lb_targets_match_workers" {
 
   assert {
     condition     = module.infrastructure._test_counts.ingress_lb_targets == 4
-    error_message = "Ingress LB worker targets must match worker_node_count."
+    error_message = "Ingress LB worker targets must match agent_node_count."
   }
 }
 
@@ -474,8 +492,9 @@ run "control_plane_lb_always_exists" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -491,8 +510,9 @@ run "output_ingress_null_when_harmony_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     harmony = {
       enabled = false
     }
@@ -513,9 +533,10 @@ run "kured_not_deployed_on_single_master" {
   command = plan
 
   variables {
-    hetzner_token          = "mock-token"
+    cluster_domain         = "example.com"
+    hcloud_api_token       = "mock-token"
     domain                 = "test.example.com"
-    master_node_count      = 1
+    control_plane_count    = 1
     enable_auto_os_updates = true
   }
 
@@ -529,9 +550,10 @@ run "kured_deployed_on_ha_with_auto_updates" {
   command = plan
 
   variables {
-    hetzner_token          = "mock-token"
+    cluster_domain         = "example.com"
+    hcloud_api_token       = "mock-token"
     domain                 = "test.example.com"
-    master_node_count      = 3
+    control_plane_count    = 3
     enable_auto_os_updates = true
   }
 
@@ -553,8 +575,9 @@ run "pre_upgrade_snapshot_disabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -570,8 +593,9 @@ run "pre_upgrade_snapshot_enabled_with_etcd_backup" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled       = true
@@ -595,8 +619,9 @@ run "outputs_reflect_backup_state" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled       = true
@@ -620,8 +645,9 @@ run "longhorn_disabled_by_default" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {
@@ -672,8 +698,9 @@ run "longhorn_enabled_creates_resources" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall = true
@@ -705,12 +732,12 @@ run "longhorn_enabled_creates_resources" {
 
   assert {
     condition     = module.addons._test_counts.longhorn_worker_labels == 3
-    error_message = "Longhorn worker labels must match worker_node_count (default 3)."
+    error_message = "Longhorn worker labels must match agent_node_count (default 3)."
   }
 
   assert {
     condition     = module.addons._test_counts.longhorn_worker_disks == 3
-    error_message = "Longhorn worker disks must match worker_node_count (default 3)."
+    error_message = "Longhorn worker disks must match agent_node_count (default 3)."
   }
 
   assert {
@@ -731,8 +758,9 @@ run "longhorn_s3_secret_not_created_without_backup" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall = true
@@ -758,8 +786,9 @@ run "longhorn_s3_secret_created_with_backup" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall    = true
@@ -790,8 +819,9 @@ run "longhorn_outputs_reflect_enabled_state" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall = true
@@ -821,8 +851,9 @@ run "longhorn_outputs_reflect_disabled_state" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 
   assert {

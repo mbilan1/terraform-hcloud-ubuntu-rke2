@@ -25,35 +25,44 @@ packer {
 }
 
 variable "hcloud_token" {
-  type      = string
-  sensitive = true
+  description = "Hetzner Cloud API token with read/write access for creating build servers and snapshots."
+  type        = string
+  sensitive   = true
 }
 
 variable "base_image" {
-  type    = string
-  default = "ubuntu-24.04"
+  description = "Source OS image for the golden snapshot. Must be an Ubuntu LTS release supported by RKE2."
+  type        = string
+  default     = "ubuntu-24.04"
+
+  validation {
+    condition     = can(regex("^ubuntu-", var.base_image))
+    error_message = "Only Ubuntu images are supported (e.g. 'ubuntu-24.04')."
+  }
 }
 
 variable "server_type" {
-  type    = string
-  default = "cx22"
+  description = "Hetzner server type used as the temporary build instance. A small shared-CPU type is sufficient since the image is just installing packages."
+  type        = string
+  default     = "cx22"
 }
 
 variable "location" {
-  type    = string
-  default = "hel1"
+  description = "Hetzner datacenter for the temporary build server. The resulting snapshot is location-independent."
+  type        = string
+  default     = "hel1"
 }
 
 variable "image_name" {
-  type    = string
-  default = "rke2-base"
+  description = "Base name for the resulting snapshot. A timestamp suffix is appended automatically (e.g. 'rke2-base-1706000000')."
+  type        = string
+  default     = "rke2-base"
 }
 
-variable "rke2_version" {
-  type    = string
-  default = "v1.34.4+rke2r1"
-  # NOTE: Match this to var.rke2_version in the Terraform module.
-  # Empty string installs the latest stable release (same as INSTALL_RKE2_VERSION= unset).
+variable "kubernetes_version" {
+  description = "RKE2 release tag to pre-install into the image. Must match the Terraform module's var.kubernetes_version to avoid version drift at bootstrap time."
+  type        = string
+  default     = "v1.34.4+rke2r1"
 }
 
 source "hcloud" "rke2_base" {
@@ -70,7 +79,7 @@ source "hcloud" "rke2_base" {
     "base-image"   = var.base_image
     # NOTE: rke2-version label allows Terraform data source lookups like:
     # data "hcloud_image" "rke2" { with_selector = "rke2-version=v1.34.4+rke2r1" }
-    "rke2-version" = var.rke2_version
+    "rke2-version" = var.kubernetes_version
   }
 
   ssh_username = "root"
@@ -85,14 +94,14 @@ build {
   }
 
   # Run Ansible playbook for system hardening, package pre-installation, and RKE2 binary pre-install.
-  # DECISION: Pass rke2_version as extra-var so the image version matches the Terraform module variable.
+  # DECISION: Pass kubernetes_version as extra-var so the image version matches the Terraform module variable.
   # Why: Both must agree — if the image has v1.34 pre-installed but Terraform tries to install v1.35,
   #      the bootstrap script's idempotency check will skip the re-install, locking the version to
   #      what Packer baked in. Build a new image when upgrading.
   provisioner "ansible-local" {
     playbook_file = "ansible/playbook.yml"
     role_paths    = ["ansible/roles/rke2-base"]
-    extra_vars    = "rke2_version=${var.rke2_version}"
+    extra_vars    = "kubernetes_version=${var.kubernetes_version}"
   }
 
   # Clean up for snapshot

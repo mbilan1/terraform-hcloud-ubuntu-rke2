@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Hetzner Cloud CSI Driver
+# Hetzner Cloud CSI Driver — Persistent volume provisioner
 # https://github.com/hetznercloud/csi-driver
 #
 # Provides ReadWriteOnce persistent volumes backed by Hetzner Cloud Volumes.
@@ -11,51 +11,68 @@
 # See: docs/PLAN-operational-readiness.md — Appendix C
 # ──────────────────────────────────────────────────────────────────────────────
 
-# The CSI driver requires the same "hcloud" secret as HCCM. When HCCM is
-# disabled but CSI is enabled we must still ensure the secret exists.
+locals {
+  deploy_csi = var.cluster_configuration.hcloud_csi.preinstall
+  # The CSI driver requires the "hcloud" secret. When HCCM is enabled, it already
+  # creates this secret. We only create a standalone copy when HCCM is disabled.
+  csi_needs_own_secret = local.deploy_csi && !local.deploy_hccm
+}
+
+# Standalone "hcloud" secret — created only when HCCM is NOT managing one.
+# DECISION: Share the same secret name ("hcloud") rather than creating a separate CSI-specific secret.
+# Why: Both HCCM and CSI expect the secret at "hcloud" in kube-system. Using a single
+#      name avoids Helm values overrides and matches the upstream chart defaults.
 resource "kubernetes_secret_v1" "hcloud_csi" {
   depends_on = [terraform_data.wait_for_infrastructure]
 
-  # Only create stand-alone secret when HCCM is NOT creating one.
-  count = var.cluster_configuration.hcloud_csi.preinstall && !var.cluster_configuration.hcloud_controller.preinstall ? 1 : 0
+  for_each = local.csi_needs_own_secret ? toset(["hcloud-csi"]) : toset([])
 
   metadata {
     name      = "hcloud"
     namespace = "kube-system"
+    labels = {
+      "app.kubernetes.io/component" = "csi-driver"
+      "managed-by"                  = "opentofu"
+    }
   }
 
   data = {
-    token   = var.hetzner_token
+    token   = var.hcloud_api_token
     network = var.network_name
   }
 
   lifecycle {
-    ignore_changes = [
-      metadata[0].annotations,
-    ]
+    ignore_changes = [metadata[0].annotations, metadata[0].labels]
   }
 }
 
 resource "helm_release" "hcloud_csi" {
   depends_on = [
     terraform_data.wait_for_infrastructure,
-    kubernetes_secret_v1.hcloud_ccm, # wait for the shared secret if HCCM creates it
-    kubernetes_secret_v1.hcloud_csi, # or the one we create ourselves
+    kubernetes_secret_v1.cloud_controller_token, # shared secret when HCCM manages it
+    kubernetes_secret_v1.hcloud_csi,             # standalone secret when HCCM is off
   ]
 
-  count = var.cluster_configuration.hcloud_csi.preinstall ? 1 : 0
+  for_each = local.deploy_csi ? toset(["hcloud-csi"]) : toset([])
 
+  name       = "hcloud-csi"
   repository = "https://charts.hetzner.cloud"
   chart      = "hcloud-csi"
-  name       = "hcloud-csi"
   namespace  = "kube-system"
   version    = var.cluster_configuration.hcloud_csi.version
+  timeout    = 300
 
+  # DECISION: Configure storage class inline via Helm values.
+  # Why: The Hetzner CSI chart supports storageClasses[] in values.yaml,
+  #      which is cleaner than creating a separate StorageClass resource.
   values = [yamlencode({
     storageClasses = [{
       name                = "hcloud-volumes"
       defaultStorageClass = var.cluster_configuration.hcloud_csi.default_storage_class
       reclaimPolicy       = var.cluster_configuration.hcloud_csi.reclaim_policy
     }]
+    controller = {
+      hcloudVolumeDefaultLocation = ""
+    }
   })]
 }

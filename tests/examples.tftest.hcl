@@ -78,10 +78,11 @@ run "minimal_setup_plans_successfully" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "minimal.example.com"
-    master_node_count = 1
-    worker_node_count = 0
+    cluster_domain      = "example.com"
+    hcloud_api_token    = "mock-token"
+    domain              = "minimal.example.com"
+    control_plane_count = 1
+    agent_node_count    = 0
   }
 }
 
@@ -93,15 +94,16 @@ run "openedx_tutor_pattern_plans_successfully" {
   command = plan
 
   variables {
-    hetzner_token           = "mock-token"
+    cluster_domain          = "example.com"
+    hcloud_api_token        = "mock-token"
     domain                  = "openedx.example.com"
-    cluster_name            = "openedx"
-    master_node_count       = 3
-    worker_node_count       = 3
+    rke2_cluster_name       = "openedx"
+    control_plane_count     = 3
+    agent_node_count        = 3
     master_node_server_type = "cx23"
     worker_node_server_type = "cx33"
     node_locations          = ["hel1", "nbg1", "fsn1"]
-    rke2_cni                = "cilium"
+    cni_plugin              = "cilium"
     letsencrypt_issuer      = "admin@example.com"
 
     cluster_configuration = {

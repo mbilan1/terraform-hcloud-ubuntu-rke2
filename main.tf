@@ -16,8 +16,8 @@ locals {
   #      while keeping workers (and thus stateful workloads) confined to a
   #      subset (e.g., Germany-only) to reduce cross-DC storage latency.
   # NOTE: Empty lists fall back to node_locations for backward compatibility.
-  effective_master_node_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
-  effective_worker_node_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+  effective_master_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
+  effective_worker_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -28,48 +28,48 @@ module "infrastructure" {
   source = "./modules/infrastructure"
 
   # Cloud credentials
-  hetzner_token = var.hetzner_token
+  hcloud_api_token = var.hcloud_api_token
 
   # Cluster basics
-  cluster_name            = var.cluster_name
-  master_node_count       = var.master_node_count
-  worker_node_count       = var.worker_node_count
+  rke2_cluster_name       = var.rke2_cluster_name
+  control_plane_count     = var.control_plane_count
+  agent_node_count        = var.agent_node_count
   master_node_server_type = var.master_node_server_type
   worker_node_server_type = var.worker_node_server_type
   master_node_image       = var.master_node_image
   worker_node_image       = var.worker_node_image
   node_locations          = var.node_locations
-  master_node_locations   = local.effective_master_node_locations
-  worker_node_locations   = local.effective_worker_node_locations
+  master_node_locations   = local.effective_master_locations
+  worker_node_locations   = local.effective_worker_locations
 
   # Network
-  network_address = var.network_address
-  subnet_address  = var.subnet_address
-  network_zone    = var.network_zone
+  hcloud_network_cidr = var.hcloud_network_cidr
+  subnet_address      = var.subnet_address
+  hcloud_network_zone = var.hcloud_network_zone
 
   # Load Balancer
-  lb_location                 = var.lb_location
-  additional_lb_service_ports = var.additional_lb_service_ports
-  enable_ssh_on_lb            = var.enable_ssh_on_lb
+  load_balancer_location = var.load_balancer_location
+  extra_lb_ports         = var.extra_lb_ports
+  enable_ssh_on_lb       = var.enable_ssh_on_lb
 
   # Firewall
   ssh_allowed_cidrs     = var.ssh_allowed_cidrs
   k8s_api_allowed_cidrs = var.k8s_api_allowed_cidrs
 
   # SSH
-  generate_ssh_key_file = var.generate_ssh_key_file
+  save_ssh_key_locally = var.save_ssh_key_locally
 
   # DNS
   create_dns_record = var.create_dns_record
   route53_zone_id   = var.route53_zone_id
-  domain            = var.domain
+  cluster_domain    = var.cluster_domain
 
   # Harmony toggle (controls ingress LB creation + cloud-init ingress disable)
   harmony_enabled = var.harmony.enabled
 
   # Cloud-init / RKE2 config
-  rke2_version              = var.rke2_version
-  rke2_cni                  = var.rke2_cni
+  kubernetes_version        = var.kubernetes_version
+  cni_plugin                = var.cni_plugin
   enable_secrets_encryption = var.enable_secrets_encryption
   etcd_backup               = var.cluster_configuration.etcd_backup
 
@@ -92,10 +92,10 @@ module "addons" {
   worker_node_names = module.infrastructure.worker_node_names
 
   # Root passthrough
-  hetzner_token                   = var.hetzner_token
+  hcloud_api_token                = var.hcloud_api_token
   cluster_configuration           = var.cluster_configuration
   harmony                         = var.harmony
-  domain                          = var.domain
+  cluster_domain                  = var.cluster_domain
   letsencrypt_issuer              = var.letsencrypt_issuer
   cluster_issuer_name             = var.cluster_issuer_name
   aws_region                      = var.aws_region
@@ -107,8 +107,8 @@ module "addons" {
   enable_auto_os_updates          = var.enable_auto_os_updates
   enable_auto_kubernetes_updates  = var.enable_auto_kubernetes_updates
   allow_remote_manifest_downloads = var.allow_remote_manifest_downloads
-  rke2_version                    = var.rke2_version
-  worker_node_count               = var.worker_node_count
-  master_node_count               = var.master_node_count
-  lb_location                     = var.lb_location
+  kubernetes_version              = var.kubernetes_version
+  agent_node_count                = var.agent_node_count
+  control_plane_count             = var.control_plane_count
+  load_balancer_location          = var.load_balancer_location
 }

@@ -61,16 +61,16 @@
 #      no network to join at build time. Starting rke2-server here would fail.
 #      Systemd unit is intentionally NOT enabled; cloud-init bootstrap does that.
 #
-# NOTE: rke2_version="" installs the latest stable release. Using a pinned version
-#       is strongly recommended so the image version matches var.rke2_version in
+# NOTE: kubernetes_version="" installs the latest stable release. Using a pinned version
+#       is strongly recommended so the image version matches var.kubernetes_version in
 #       the Terraform module. Build a new image when upgrading RKE2.
 # ──────────────────────────────────────────────────────────────────────────────
 
 - name: Pre-install RKE2 binaries (server + agent)
   ansible.builtin.shell: |
     set -euo pipefail
-    {% if rke2_version != "" %}
-    INSTALL_RKE2_VERSION="{{ rke2_version }}" \
+    {% if kubernetes_version != "" %}
+    INSTALL_RKE2_VERSION="{{ kubernetes_version }}" \
     {% endif %}
     INSTALL_RKE2_SKIP_START=true \
     sh -c "$(curl -sfL https://get.rke2.io)"
@@ -82,8 +82,8 @@
 - name: Pre-install RKE2 agent binaries
   ansible.builtin.shell: |
     set -euo pipefail
-    {% if rke2_version != "" %}
-    INSTALL_RKE2_VERSION="{{ rke2_version }}" \
+    {% if kubernetes_version != "" %}
+    INSTALL_RKE2_VERSION="{{ kubernetes_version }}" \
     {% endif %}
     INSTALL_RKE2_TYPE=agent \
     INSTALL_RKE2_SKIP_START=true \
@@ -96,7 +96,7 @@
 
 - name: Record pre-installed RKE2 version into image metadata file
   # DECISION: Write a version stamp file so the bootstrap script can compare it
-  # against var.rke2_version at runtime and skip re-install when they match.
+  # against var.kubernetes_version at runtime and skip re-install when they match.
   ansible.builtin.shell: |
     /usr/local/bin/rke2 --version | head -1 | awk '{print $3}'
   register: _rke2_installed_version

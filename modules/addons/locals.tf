@@ -3,7 +3,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 locals {
-  is_ha_cluster = var.master_node_count >= 3
+  is_ha_cluster = var.control_plane_count >= 3
 
   # --- Harmony TLS bootstrap ---
   # DECISION: Configure a default TLS certificate for Harmony's ingress-nginx.
@@ -24,17 +24,17 @@ locals {
   )
 
   # --- System Upgrade Controller manifests ---
-  system_upgrade_controller_crds       = try(split("---", data.http.system_upgrade_controller_crds[0].response_body), null)
-  system_upgrade_controller_components = try(split("---", data.http.system_upgrade_controller[0].response_body), null)
+  suc_crd_documents        = try(split("---", data.http.suc_crd_manifest[0].response_body), null)
+  suc_controller_documents = try(split("---", data.http.suc_controller_manifest[0].response_body), null)
 
   # --- Longhorn S3 endpoint auto-detection ---
-  # DECISION: Auto-detect Hetzner Object Storage endpoint from lb_location for Longhorn.
+  # DECISION: Auto-detect Hetzner Object Storage endpoint from load_balancer_location for Longhorn.
   # Why: Reduces configuration burden — operator only needs backup_target + credentials.
   # See: https://docs.hetzner.com/storage/object-storage/overview
   longhorn_s3_endpoint = (
     trimspace(var.cluster_configuration.longhorn.s3_endpoint) != ""
     ? var.cluster_configuration.longhorn.s3_endpoint
-    : "https://${var.lb_location}.your-objectstorage.com"
+    : "https://${var.load_balancer_location}.your-objectstorage.com"
   )
 
   longhorn_backup_target = (
@@ -45,7 +45,7 @@ locals {
 
   # --- Harmony infrastructure values ---
   harmony_infrastructure_values = {
-    clusterDomain     = var.domain
+    clusterDomain     = var.cluster_domain
     notificationEmail = var.letsencrypt_issuer
 
     # Use hostPort + DaemonSet so traffic flows through the single management LB

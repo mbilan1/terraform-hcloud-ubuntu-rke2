@@ -37,15 +37,15 @@ provider "aws" {
 module "rke2" {
   source = "../.."
 
-  hetzner_token = var.hcloud_token
-  domain        = var.domain
-  cluster_name  = var.cluster_name
+  hcloud_api_token  = var.hcloud_token
+  domain            = var.cluster_domain
+  rke2_cluster_name = var.rke2_cluster_name
 
   # DNS managed separately via Route53 module below
   create_dns_record = false
 
-  master_node_count       = 3
-  worker_node_count       = 3
+  control_plane_count     = 3
+  agent_node_count        = 3
   master_node_server_type = "cx23"
   worker_node_server_type = "cx33"
   # DECISION: Demonstrate split placement:
@@ -57,7 +57,7 @@ module "rke2" {
   # Backward-compat fallback (unused when master/worker lists are set).
   node_locations = ["hel1", "nbg1", "fsn1"]
 
-  rke2_cni = "cilium"
+  cni_plugin = "cilium"
 
   harmony = {
     enabled = true
@@ -101,7 +101,7 @@ module "rke2" {
   }
 
   # Health check: verify /heartbeat after upgrades
-  health_check_urls = var.enable_backups ? ["https://${var.domain}/heartbeat"] : []
+  health_check_urls = var.enable_backups ? ["https://${var.cluster_domain}/heartbeat"] : []
 
   # Security: restrict in production
   # ssh_allowed_cidrs     = ["YOUR_IP/32"]
@@ -159,15 +159,15 @@ output "ingress_lb_ipv4" {
 
 output "lms_url" {
   description = "LMS URL (main Open edX site)"
-  value       = "https://${var.domain}"
+  value       = "https://${var.cluster_domain}"
 }
 
 output "studio_url" {
   description = "Studio URL (CMS)"
-  value       = "https://studio.${var.domain}"
+  value       = "https://studio.${var.cluster_domain}"
 }
 
 output "mfe_url" {
   description = "MFE URL (Micro-Frontends)"
-  value       = "https://apps.${var.domain}"
+  value       = "https://apps.${var.cluster_domain}"
 }

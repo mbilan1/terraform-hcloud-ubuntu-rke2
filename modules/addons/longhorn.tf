@@ -130,11 +130,11 @@ resource "kubectl_manifest" "longhorn_iscsi_installer" {
 #       systemManagedComponentsNodeSelector to schedule data replicas only on workers,
 #       protecting master disk space and etcd performance.
 resource "kubernetes_labels" "longhorn_worker" {
-  count = var.cluster_configuration.longhorn.preinstall ? var.worker_node_count : 0
+  count = var.cluster_configuration.longhorn.preinstall ? var.agent_node_count : 0
 
   depends_on = [
     terraform_data.wait_for_infrastructure,
-    helm_release.hccm,
+    helm_release.cloud_controller,
   ]
 
   api_version = "v1"
@@ -160,7 +160,7 @@ resource "kubernetes_labels" "longhorn_worker" {
 # Defining disks declaratively makes the "Longhorn-only PVC" path reliable and
 # keeps behavior consistent across environments.
 resource "kubectl_manifest" "longhorn_worker_disks" {
-  count = var.cluster_configuration.longhorn.preinstall ? var.worker_node_count : 0
+  count = var.cluster_configuration.longhorn.preinstall ? var.agent_node_count : 0
 
   depends_on = [
     terraform_data.wait_for_infrastructure,
@@ -193,7 +193,7 @@ resource "helm_release" "longhorn" {
     kubernetes_namespace_v1.longhorn,
     kubernetes_labels.longhorn_worker,
     kubectl_manifest.longhorn_iscsi_installer,
-    helm_release.hccm,
+    helm_release.cloud_controller,
     terraform_data.wait_for_infrastructure,
   ]
   count = var.cluster_configuration.longhorn.preinstall ? 1 : 0
@@ -205,17 +205,53 @@ resource "helm_release" "longhorn" {
   version    = var.cluster_configuration.longhorn.version
   timeout    = 600
 
-  values = [templatefile("${path.module}/templates/values/longhorn.yaml", {
-    REPLICA_COUNT                   = var.cluster_configuration.longhorn.replica_count
-    DEFAULT_STORAGE_CLASS           = var.cluster_configuration.longhorn.default_storage_class
-    BACKUP_TARGET                   = local.longhorn_backup_target
-    BACKUP_TARGET_CREDENTIAL_SECRET = trimspace(var.cluster_configuration.longhorn.backup_target) != "" ? "longhorn-s3-credentials" : ""
-    BACKUP_SCHEDULE                 = var.cluster_configuration.longhorn.backup_schedule
-    BACKUP_RETAIN                   = var.cluster_configuration.longhorn.backup_retain
-    GUARANTEED_INSTANCE_MANAGER_CPU = var.cluster_configuration.longhorn.guaranteed_instance_manager_cpu
-    STORAGE_OVER_PROVISIONING       = var.cluster_configuration.longhorn.storage_over_provisioning
-    STORAGE_MINIMAL_AVAILABLE       = var.cluster_configuration.longhorn.storage_minimal_available
-    SNAPSHOT_MAX_COUNT              = var.cluster_configuration.longhorn.snapshot_max_count
+  values = [yamlencode({
+    defaultSettings = {
+      defaultReplicaCount                  = var.cluster_configuration.longhorn.replica_count
+      systemManagedComponentsNodeSelector  = "node-role.kubernetes.io/worker:true"
+      createDefaultDiskLabeledNodes        = false
+      backupTarget                         = local.longhorn_backup_target
+      backupTargetCredentialSecret         = trimspace(var.cluster_configuration.longhorn.backup_target) != "" ? "longhorn-s3-credentials" : ""
+      defaultDataLocality                  = "best-effort"
+      disableRevisionCounter               = "true"
+      replicaAutoBalance                   = "best-effort"
+      guaranteedInstanceManagerCPU         = var.cluster_configuration.longhorn.guaranteed_instance_manager_cpu
+      storageOverProvisioningPercentage    = var.cluster_configuration.longhorn.storage_over_provisioning
+      storageMinimalAvailablePercentage    = var.cluster_configuration.longhorn.storage_minimal_available
+      snapshotMaxCount                     = var.cluster_configuration.longhorn.snapshot_max_count
+      autoCleanupSnapshotWhenDeleteBackup  = true
+      autoSalvage                          = true
+      nodeDrainPolicy                      = "allow-if-replica-is-stopped"
+      concurrentReplicaRebuildPerNodeLimit = 3
+    }
+    persistence = {
+      defaultClass             = var.cluster_configuration.longhorn.default_storage_class
+      defaultClassReplicaCount = var.cluster_configuration.longhorn.replica_count
+      reclaimPolicy            = "Retain"
+      defaultDataLocality      = "best-effort"
+      disableRevisionCounter   = "true"
+    }
+    longhornUI = {
+      enabled = true
+    }
+    recurringJobSelector = trimspace(var.cluster_configuration.longhorn.backup_target) != "" ? [
+      {
+        name    = "backup-all"
+        isGroup = true
+      }
+    ] : []
+    longhornRecurringJobs = trimspace(var.cluster_configuration.longhorn.backup_target) != "" ? [
+      {
+        name        = "snapshot-and-backup"
+        task        = "backup"
+        cron        = var.cluster_configuration.longhorn.backup_schedule
+        retain      = var.cluster_configuration.longhorn.backup_retain
+        concurrency = 2
+        labels = {
+          "recurring-job-group.longhorn.io/default" = "enabled"
+        }
+      }
+    ] : []
   })]
 }
 
@@ -228,7 +264,7 @@ resource "terraform_data" "longhorn_health_check" {
   count      = var.cluster_configuration.longhorn.preinstall ? 1 : 0
   depends_on = [helm_release.longhorn]
 
-  triggers_replace = [var.rke2_version, var.cluster_configuration.longhorn.version]
+  triggers_replace = [var.kubernetes_version, var.cluster_configuration.longhorn.version]
 
   connection {
     type        = "ssh"
@@ -265,7 +301,7 @@ resource "terraform_data" "longhorn_pre_upgrade_snapshot" {
   count      = var.cluster_configuration.longhorn.preinstall ? 1 : 0
   depends_on = [helm_release.longhorn]
 
-  triggers_replace = [var.rke2_version]
+  triggers_replace = [var.kubernetes_version]
 
   connection {
     type        = "ssh"

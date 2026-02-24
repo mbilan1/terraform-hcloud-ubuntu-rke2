@@ -22,31 +22,47 @@
 
 # --- Random resources ---
 
+# Step 1: root → module (old name)
 moved {
   from = random_string.master_node_suffix
-  to   = module.infrastructure.random_string.master_node_suffix
+  to   = module.infrastructure.random_string.control_plane_id
+}
+
+# Step 2: module (old name) → module (new resource type)
+# DECISION: Transition from random_string to random_id for node suffixes.
+# Why: random_id produces URL-safe identifiers with higher entropy per character.
+moved {
+  from = module.infrastructure.random_string.control_plane_id
+  to   = module.infrastructure.random_id.control_plane_suffix
 }
 
 moved {
   from = random_password.rke2_token
-  to   = module.infrastructure.random_password.rke2_token
+  to   = module.infrastructure.random_password.cluster_join_secret
 }
 
+# Step 1: root → module (old name)
 moved {
   from = random_string.worker_node_suffix
-  to   = module.infrastructure.random_string.worker_node_suffix
+  to   = module.infrastructure.random_string.agent_id
+}
+
+# Step 2: module (old name) → module (new resource type)
+moved {
+  from = module.infrastructure.random_string.agent_id
+  to   = module.infrastructure.random_id.agent_suffix
 }
 
 # --- SSH ---
 
 moved {
   from = tls_private_key.machines
-  to   = module.infrastructure.tls_private_key.machines
+  to   = module.infrastructure.tls_private_key.ssh_identity
 }
 
 moved {
   from = hcloud_ssh_key.main
-  to   = module.infrastructure.hcloud_ssh_key.main
+  to   = module.infrastructure.hcloud_ssh_key.cluster
 }
 
 moved {
@@ -58,12 +74,12 @@ moved {
 
 moved {
   from = hcloud_network.main
-  to   = module.infrastructure.hcloud_network.main
+  to   = module.infrastructure.hcloud_network.cluster
 }
 
 moved {
   from = hcloud_network_subnet.main
-  to   = module.infrastructure.hcloud_network_subnet.main
+  to   = module.infrastructure.hcloud_network_subnet.nodes
 }
 
 # --- Firewall ---
@@ -77,17 +93,17 @@ moved {
 
 moved {
   from = hcloud_server.master
-  to   = module.infrastructure.hcloud_server.master
+  to   = module.infrastructure.hcloud_server.initial_control_plane
 }
 
 moved {
   from = hcloud_server.additional_masters
-  to   = module.infrastructure.hcloud_server.additional_masters
+  to   = module.infrastructure.hcloud_server.control_plane
 }
 
 moved {
   from = hcloud_server.worker
-  to   = module.infrastructure.hcloud_server.worker
+  to   = module.infrastructure.hcloud_server.agent
 }
 
 # --- Load Balancer: Control Plane ---
@@ -192,50 +208,88 @@ moved {
 # ║  Addons module (modules/addons/) — 24 blocks                              ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# --- HCCM ---
+# --- HCCM (count → for_each migration) ---
 
+# Step 1: root → module (count address)
 moved {
   from = kubernetes_secret_v1.hcloud_ccm
-  to   = module.addons.kubernetes_secret_v1.hcloud_ccm
+  to   = module.addons.kubernetes_secret_v1.cloud_controller_token[0]
+}
+
+# Step 2: count[0] → for_each["key"]
+moved {
+  from = module.addons.kubernetes_secret_v1.cloud_controller_token[0]
+  to   = module.addons.kubernetes_secret_v1.cloud_controller_token["hcloud-ccm"]
 }
 
 moved {
   from = helm_release.hccm
-  to   = module.addons.helm_release.hccm
+  to   = module.addons.helm_release.cloud_controller[0]
 }
 
-# --- CSI ---
+moved {
+  from = module.addons.helm_release.cloud_controller[0]
+  to   = module.addons.helm_release.cloud_controller["hccm"]
+}
+
+# --- CSI (count → for_each migration) ---
 
 moved {
   from = kubernetes_secret_v1.hcloud_csi
-  to   = module.addons.kubernetes_secret_v1.hcloud_csi
+  to   = module.addons.kubernetes_secret_v1.hcloud_csi[0]
+}
+
+moved {
+  from = module.addons.kubernetes_secret_v1.hcloud_csi[0]
+  to   = module.addons.kubernetes_secret_v1.hcloud_csi["hcloud-csi"]
 }
 
 moved {
   from = helm_release.hcloud_csi
-  to   = module.addons.helm_release.hcloud_csi
+  to   = module.addons.helm_release.hcloud_csi[0]
 }
 
-# --- cert-manager ---
+moved {
+  from = module.addons.helm_release.hcloud_csi[0]
+  to   = module.addons.helm_release.hcloud_csi["hcloud-csi"]
+}
+
+# --- cert-manager (count → for_each migration) ---
 
 moved {
   from = kubernetes_namespace_v1.cert_manager
-  to   = module.addons.kubernetes_namespace_v1.cert_manager
+  to   = module.addons.kubernetes_namespace_v1.certificate_manager[0]
 }
 
 moved {
+  from = module.addons.kubernetes_namespace_v1.certificate_manager[0]
+  to   = module.addons.kubernetes_namespace_v1.certificate_manager["cert-manager"]
+}
+
+# NOTE: dns_solver_credentials stays count-based (sensitive var.aws_access_key in condition)
+moved {
   from = kubernetes_secret_v1.cert_manager
-  to   = module.addons.kubernetes_secret_v1.cert_manager
+  to   = module.addons.kubernetes_secret_v1.dns_solver_credentials
 }
 
 moved {
   from = helm_release.cert_manager
-  to   = module.addons.helm_release.cert_manager
+  to   = module.addons.helm_release.certificate_manager[0]
+}
+
+moved {
+  from = module.addons.helm_release.certificate_manager[0]
+  to   = module.addons.helm_release.certificate_manager["cert-manager"]
 }
 
 moved {
   from = kubectl_manifest.cert_manager_issuer
-  to   = module.addons.kubectl_manifest.cert_manager_issuer
+  to   = module.addons.kubectl_manifest.letsencrypt_cluster_issuer[0]
+}
+
+moved {
+  from = module.addons.kubectl_manifest.letsencrypt_cluster_issuer[0]
+  to   = module.addons.kubectl_manifest.letsencrypt_cluster_issuer["issuer"]
 }
 
 # --- Longhorn ---
@@ -282,51 +336,73 @@ moved {
   to   = module.addons.kubectl_manifest.ingress_configuration
 }
 
-# --- Harmony ---
+# --- Harmony (count → for_each migration) ---
 
 moved {
   from = kubernetes_namespace_v1.harmony
-  to   = module.addons.kubernetes_namespace_v1.harmony
+  to   = module.addons.kubernetes_namespace_v1.harmony[0]
+}
+
+moved {
+  from = module.addons.kubernetes_namespace_v1.harmony[0]
+  to   = module.addons.kubernetes_namespace_v1.harmony["harmony"]
 }
 
 moved {
   from = helm_release.harmony
-  to   = module.addons.helm_release.harmony
+  to   = module.addons.helm_release.harmony[0]
 }
 
-# --- Self-maintenance ---
+moved {
+  from = module.addons.helm_release.harmony[0]
+  to   = module.addons.helm_release.harmony["harmony"]
+}
+
+# --- Self-maintenance (count → for_each migration) ---
 
 moved {
   from = kubernetes_namespace_v1.kured
-  to   = module.addons.kubernetes_namespace_v1.kured
+  to   = module.addons.kubernetes_namespace_v1.reboot_daemon[0]
+}
+
+moved {
+  from = module.addons.kubernetes_namespace_v1.reboot_daemon[0]
+  to   = module.addons.kubernetes_namespace_v1.reboot_daemon["kured"]
 }
 
 moved {
   from = helm_release.kured
-  to   = module.addons.helm_release.kured
+  to   = module.addons.helm_release.reboot_daemon[0]
 }
 
 moved {
-  from = kubectl_manifest.system_upgrade_controller_crds
-  to   = module.addons.kubectl_manifest.system_upgrade_controller_crds
+  from = module.addons.helm_release.reboot_daemon[0]
+  to   = module.addons.helm_release.reboot_daemon["kured"]
 }
 
-moved {
-  from = kubectl_manifest.system_upgrade_controller_ns
-  to   = module.addons.kubectl_manifest.system_upgrade_controller_ns
-}
-
-moved {
-  from = kubectl_manifest.system_upgrade_controller
-  to   = module.addons.kubectl_manifest.system_upgrade_controller
-}
+# NOTE: SUC CRDs, namespace, and controller use sha1(content) as for_each keys.
+# These are dynamic hashes computed at plan time — moved blocks cannot target them.
+# The old count-based resources will be destroyed and recreated with hash keys.
+# This is safe because CRDs and namespace manifests are declarative/idempotent.
+# TODO: Remove these stale moved blocks in the next major version once all
+#       deployments have applied at least once with the new for_each keys.
 
 moved {
   from = kubectl_manifest.system_upgrade_controller_server_plan
-  to   = module.addons.kubectl_manifest.system_upgrade_controller_server_plan
+  to   = module.addons.kubectl_manifest.suc_server_upgrade_plan[0]
+}
+
+moved {
+  from = module.addons.kubectl_manifest.suc_server_upgrade_plan[0]
+  to   = module.addons.kubectl_manifest.suc_server_upgrade_plan["server-plan"]
 }
 
 moved {
   from = kubectl_manifest.system_upgrade_controller_agent_plan
-  to   = module.addons.kubectl_manifest.system_upgrade_controller_agent_plan
+  to   = module.addons.kubectl_manifest.suc_agent_upgrade_plan[0]
+}
+
+moved {
+  from = module.addons.kubectl_manifest.suc_agent_upgrade_plan[0]
+  to   = module.addons.kubectl_manifest.suc_agent_upgrade_plan["agent-plan"]
 }

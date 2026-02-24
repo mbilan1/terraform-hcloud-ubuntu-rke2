@@ -15,7 +15,7 @@ route53_record_name = "openedx"           # → openedx.example.com
 domain = "openedx.example.com"
 
 # ── Optional ──────────────────────────────────────────────────
-cluster_name      = "openedx"
+rke2_cluster_name      = "openedx"
 letsencrypt_email = "admin@example.com"
 
 # ── Backup (Hetzner Object Storage) ──────────────────────────

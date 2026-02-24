@@ -1,16 +1,16 @@
-variable "hetzner_token" {
+variable "hcloud_api_token" {
+  description = "The API token for Hetzner Cloud authentication."
   type        = string
-  description = "Hetzner Cloud API Token"
 }
 
-variable "domain" {
+variable "cluster_domain" {
+  description = "The base domain name for the Kubernetes cluster."
   type        = string
   default     = "example.com"
-  description = "Cluster base domain (used by cert-manager HTTP-01 issuer and ingress hosts)."
 }
 
 variable "letsencrypt_issuer" {
+  description = "Email address for Let's Encrypt certificate notifications."
   type        = string
   default     = "admin@example.com"
-  description = "The email to send notifications regarding let's encrypt."
 }

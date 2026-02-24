@@ -2,12 +2,12 @@
 # Default variables for rke2-base role
 # These can be overridden in the playbook or via --extra-vars
 
-# RKE2 version to pre-install. Must match var.rke2_version in the Terraform module.
+# RKE2 version to pre-install. Must match var.kubernetes_version in the Terraform module.
 # DECISION: Version is pinned at image build time.
-# Why: Unpinned images (rke2_version: "") use latest-stable at build time, which drifts
+# Why: Unpinned images (kubernetes_version: "") use latest-stable at build time, which drifts
 #      between builds and makes the "skip if installed" check in the bootstrap script
 #      unable to verify a version match. Pin explicitly for reproducibility.
-rke2_version: "v1.34.4+rke2r1"
+kubernetes_version: "v1.34.4+rke2r1"
 
 # Packages to pre-install (reduces cloud-init time by ~2-3 minutes)
 rke2_base_packages:

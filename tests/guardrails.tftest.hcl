@@ -85,10 +85,11 @@ run "aws_credentials_rejects_partial" {
   command = plan
 
   variables {
-    hetzner_token  = "mock-token"
-    domain         = "test.example.com"
-    aws_access_key = "AKIAEXAMPLE"
-    aws_secret_key = ""
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    aws_access_key   = "AKIAEXAMPLE"
+    aws_secret_key   = ""
   }
 
   expect_failures = [check.aws_credentials_pair_consistency]
@@ -98,10 +99,11 @@ run "aws_credentials_accepts_both_set" {
   command = plan
 
   variables {
-    hetzner_token  = "mock-token"
-    domain         = "test.example.com"
-    aws_access_key = "AKIAEXAMPLE"
-    aws_secret_key = "secretkey123"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    aws_access_key   = "AKIAEXAMPLE"
+    aws_secret_key   = "secretkey123"
   }
 }
 
@@ -109,10 +111,11 @@ run "aws_credentials_accepts_both_empty" {
   command = plan
 
   variables {
-    hetzner_token  = "mock-token"
-    domain         = "test.example.com"
-    aws_access_key = ""
-    aws_secret_key = ""
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    aws_access_key   = ""
+    aws_secret_key   = ""
   }
 }
 
@@ -124,7 +127,8 @@ run "letsencrypt_email_required_with_route53" {
   command = plan
 
   variables {
-    hetzner_token      = "mock-token"
+    cluster_domain     = "example.com"
+    hcloud_api_token   = "mock-token"
     domain             = "test.example.com"
     route53_zone_id    = "Z1234567890"
     letsencrypt_issuer = ""
@@ -139,7 +143,8 @@ run "letsencrypt_email_passes_when_set" {
   command = plan
 
   variables {
-    hetzner_token      = "mock-token"
+    cluster_domain     = "example.com"
+    hcloud_api_token   = "mock-token"
     domain             = "test.example.com"
     route53_zone_id    = "Z1234567890"
     letsencrypt_issuer = "admin@example.com"
@@ -156,8 +161,9 @@ run "suc_version_rejects_v_prefix" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       self_maintenance = {
         system_upgrade_controller_version = "v0.13.4"
@@ -172,8 +178,9 @@ run "suc_version_accepts_valid" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       self_maintenance = {
         system_upgrade_controller_version = "0.13.4"
@@ -190,7 +197,8 @@ run "remote_downloads_required_for_k8s_updates" {
   command = plan
 
   variables {
-    hetzner_token                   = "mock-token"
+    cluster_domain                  = "example.com"
+    hcloud_api_token                = "mock-token"
     domain                          = "test.example.com"
     enable_auto_kubernetes_updates  = true
     allow_remote_manifest_downloads = false
@@ -203,7 +211,8 @@ run "remote_downloads_passes_when_enabled" {
   command = plan
 
   variables {
-    hetzner_token                   = "mock-token"
+    cluster_domain                  = "example.com"
+    hcloud_api_token                = "mock-token"
     domain                          = "test.example.com"
     enable_auto_kubernetes_updates  = true
     allow_remote_manifest_downloads = true
@@ -218,8 +227,9 @@ run "workers_country_policy_passes_germany" {
   command = plan
 
   variables {
-    hetzner_token                 = "mock-token"
-    domain                        = "test.example.com"
+    cluster_domain                 = "example.com"
+    hcloud_api_token               = "mock-token"
+    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["nbg1", "fsn1"]
   }
@@ -229,8 +239,9 @@ run "workers_country_policy_passes_finland" {
   command = plan
 
   variables {
-    hetzner_token                 = "mock-token"
-    domain                        = "test.example.com"
+    cluster_domain                 = "example.com"
+    hcloud_api_token               = "mock-token"
+    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["hel1"]
   }
@@ -240,8 +251,9 @@ run "workers_country_policy_rejects_mixed" {
   command = plan
 
   variables {
-    hetzner_token                 = "mock-token"
-    domain                        = "test.example.com"
+    cluster_domain                 = "example.com"
+    hcloud_api_token               = "mock-token"
+    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["hel1", "nbg1"]
   }
@@ -250,38 +262,41 @@ run "workers_country_policy_rejects_mixed" {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G05: rke2_version_format_when_pinned                                   ║
+# ║  UT-G05: kubernetes_version_format_when_pinned                                   ║
 # ║  Pinned version must match v1.31.6+rke2r1 format                           ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "rke2_version_rejects_bad_format" {
+run "kubernetes_version_rejects_bad_format" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    rke2_version  = "1.31.6"
+    cluster_domain     = "example.com"
+    hcloud_api_token   = "mock-token"
+    domain             = "test.example.com"
+    kubernetes_version = "1.31.6"
   }
 
-  expect_failures = [check.rke2_version_format_when_pinned]
+  expect_failures = [check.kubernetes_version_format_when_pinned]
 }
 
-run "rke2_version_accepts_empty" {
+run "kubernetes_version_accepts_empty" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    rke2_version  = ""
+    cluster_domain     = "example.com"
+    hcloud_api_token   = "mock-token"
+    domain             = "test.example.com"
+    kubernetes_version = ""
   }
 }
 
-run "rke2_version_accepts_valid_format" {
+run "kubernetes_version_accepts_valid_format" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
-    rke2_version  = "v1.31.6+rke2r1"
+    cluster_domain     = "example.com"
+    hcloud_api_token   = "mock-token"
+    domain             = "test.example.com"
+    kubernetes_version = "v1.31.6+rke2r1"
   }
 }
 
@@ -293,9 +308,10 @@ run "auto_updates_warns_on_single_master" {
   command = plan
 
   variables {
-    hetzner_token          = "mock-token"
+    cluster_domain         = "example.com"
+    hcloud_api_token       = "mock-token"
     domain                 = "test.example.com"
-    master_node_count      = 1
+    control_plane_count    = 1
     enable_auto_os_updates = true
   }
 
@@ -306,9 +322,10 @@ run "auto_updates_passes_on_ha" {
   command = plan
 
   variables {
-    hetzner_token          = "mock-token"
+    cluster_domain         = "example.com"
+    hcloud_api_token       = "mock-token"
     domain                 = "test.example.com"
-    master_node_count      = 3
+    control_plane_count    = 3
     enable_auto_os_updates = true
   }
 }
@@ -321,8 +338,9 @@ run "harmony_requires_cert_manager" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     harmony = {
       enabled = true
     }
@@ -344,9 +362,10 @@ run "harmony_requires_workers" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 0
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 0
     harmony = {
       enabled = true
     }
@@ -377,8 +396,9 @@ run "etcd_backup_rejects_missing_s3" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled = true
@@ -394,8 +414,9 @@ run "etcd_backup_passes_with_s3" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled       = true
@@ -411,8 +432,9 @@ run "etcd_backup_passes_when_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled = false
@@ -429,8 +451,9 @@ run "longhorn_and_csi_both_default_rejects" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall            = true
@@ -453,8 +476,9 @@ run "longhorn_default_csi_not_default_passes" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall            = true
@@ -479,8 +503,9 @@ run "longhorn_experimental_warning_fires" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall = true
@@ -498,8 +523,9 @@ run "longhorn_experimental_warning_does_not_fire_when_disabled" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
   }
 }
 
@@ -511,8 +537,9 @@ run "longhorn_backup_rejects_missing_s3" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall    = true
@@ -533,8 +560,9 @@ run "longhorn_backup_passes_with_s3" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall    = true
@@ -557,8 +585,9 @@ run "longhorn_backup_passes_without_target" {
   command = plan
 
   variables {
-    hetzner_token = "mock-token"
-    domain        = "test.example.com"
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
     cluster_configuration = {
       longhorn = {
         preinstall = true
@@ -583,9 +612,10 @@ run "longhorn_rejects_insufficient_workers" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 1
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 1
     cluster_configuration = {
       longhorn = {
         preinstall    = true
@@ -605,9 +635,10 @@ run "longhorn_passes_with_enough_workers" {
   command = plan
 
   variables {
-    hetzner_token     = "mock-token"
-    domain            = "test.example.com"
-    worker_node_count = 3
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    domain           = "test.example.com"
+    agent_node_count = 3
     cluster_configuration = {
       longhorn = {
         preinstall    = true

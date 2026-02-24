@@ -12,26 +12,32 @@ terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
+    # NOTE: Only the hcloud provider is needed at the example level.
+    # All other providers (kubernetes, helm, kubectl, aws, etc.) are
+    # declared inside the module and configured via passthrough variables.
     hcloud = {
       source  = "hetznercloud/hcloud"
-      version = "~> 1.44"
+      version = ">= 1.44.0, < 3.0.0"
     }
   }
 }
 
 provider "hcloud" {
   token = var.hcloud_token
+
+  # DECISION: No poll_interval or poll_function overrides — use provider defaults.
+  # Why: minimal example should demonstrate the simplest working config.
 }
 
 module "rke2" {
   source = "../.."
 
-  hetzner_token = var.hcloud_token
-  domain        = var.domain
+  hcloud_api_token = var.hcloud_token
+  domain           = var.cluster_domain
 
   # Single master, no workers — cheapest possible cluster
-  master_node_count = 1
-  worker_node_count = 0
+  control_plane_count = 1
+  agent_node_count    = 0
 
   # Defaults: all addons enabled, no Harmony, no DNS
 }

@@ -1,14 +1,26 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-
+# Automated dependency updates for OpenTofu providers and GitHub Actions.
+# Ref: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+---
 version: 2
 updates:
-  - package-ecosystem: "terraform" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  # OpenTofu / Terraform provider version bumps
+  - package-ecosystem: terraform
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"
     labels:
+      - chore
       - dependencies
-      - terraform
+
+  # Keep CI action versions current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - chore
+      - ci
