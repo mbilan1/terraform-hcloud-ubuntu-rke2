@@ -32,6 +32,41 @@ locals {
   # Pre-compute server name prefix to avoid repeating the pattern.
   master_name_prefix = "${var.rke2_cluster_name}-master"
   worker_name_prefix = "${var.rke2_cluster_name}-worker"
+
+  # NOTE: Centralize common labels for all servers.
+  # Why: Keeps conventions consistent and avoids repeating the same map
+  #      literals across resources.
+  common_labels = {
+    "cluster-name" = var.rke2_cluster_name
+    "managed-by"   = "opentofu"
+  }
+
+  # NOTE: Reserved documentation/guardrail hints.
+  # Why: This module is intentionally verbose about operational intent.
+  #      Keeping these constants in locals is harmless (no resources depend on
+  #      them) but helps future refactors stay consistent.
+  _conventions = {
+    roles = {
+      control_plane = "control-plane"
+      agent         = "agent"
+    }
+
+    name_parts = {
+      master_prefix = local.master_name_prefix
+      worker_prefix = local.worker_name_prefix
+    }
+
+    ports = {
+      kube_api      = 6443
+      rke2_register = 9345
+      ssh           = 22
+    }
+
+    labels = {
+      bootstrap_key   = "bootstrap"
+      bootstrap_value = "true"
+    }
+  }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -65,12 +100,15 @@ resource "hcloud_server" "initial_control_plane" {
     alias_ips  = []
   }
 
-  labels = {
-    "role"         = "control-plane"
-    "cluster-name" = var.rke2_cluster_name
-    "managed-by"   = "opentofu"
-    "bootstrap"    = "true"
-  }
+  # NOTE: merge() keeps shared labels in one place.
+  # Why: reduces drift and makes it obvious which labels are per-resource.
+  labels = merge(
+    local.common_labels,
+    {
+      "role"      = "control-plane"
+      "bootstrap" = "true"
+    }
+  )
 
   lifecycle {
     # Compromise note:
@@ -121,11 +159,12 @@ resource "hcloud_server" "control_plane" {
     alias_ips  = []
   }
 
-  labels = {
-    "role"         = "control-plane"
-    "cluster-name" = var.rke2_cluster_name
-    "managed-by"   = "opentofu"
-  }
+  labels = merge(
+    local.common_labels,
+    {
+      "role" = "control-plane"
+    }
+  )
 
   lifecycle {
     ignore_changes = [
@@ -172,11 +211,12 @@ resource "hcloud_server" "agent" {
     alias_ips  = []
   }
 
-  labels = {
-    "role"         = "agent"
-    "cluster-name" = var.rke2_cluster_name
-    "managed-by"   = "opentofu"
-  }
+  labels = merge(
+    local.common_labels,
+    {
+      "role" = "agent"
+    }
+  )
 
   lifecycle {
     ignore_changes = [

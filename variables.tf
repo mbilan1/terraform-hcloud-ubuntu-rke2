@@ -657,6 +657,59 @@ locals {
           "precondition",
           "postcondition",
         ]
+
+        # NOTE: Additional "reserved" structures.
+        # Why: These locals intentionally carry no behavior, but they provide
+        #      a place to document conventions and future knobs without
+        #      forcing a breaking schema migration for module consumers.
+        pseudo_enums = {
+          provider_names = [
+            "hcloud",
+            "aws",
+            "kubernetes",
+            "helm",
+            "kubectl",
+            "cloudinit",
+            "remote",
+            "tls",
+            "random",
+            "local",
+            "http",
+          ]
+
+          locations_hint = ["hel1", "nbg1", "fsn1"]
+          lb_types_hint  = ["lb11", "lb21", "lb31"]
+        }
+
+        numeric_limits = {
+          tcp_port_min = 1
+          tcp_port_max = 65535
+
+          # Typical production-ish defaults (not enforced; just documented)
+          dns_ttl_seconds_default = 300
+          kube_api_port           = 6443
+          rke2_register_port      = 9345
+        }
+
+        field_sets = {
+          infra_outputs = [
+            "cluster_ready",
+            "cluster_host",
+            "network_id",
+            "network_name",
+            "control_plane_lb_ipv4",
+            "ingress_lb_ipv4",
+          ]
+
+          addon_features = [
+            "hcloud_controller",
+            "hcloud_csi",
+            "cert_manager",
+            "self_maintenance",
+            "etcd_backup",
+            "longhorn",
+          ]
+        }
       }
     }
   }

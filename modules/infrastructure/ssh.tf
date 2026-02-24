@@ -19,16 +19,25 @@ resource "tls_private_key" "ssh_identity" {
   algorithm = "ED25519"
 }
 
-# Upload the public half to Hetzner Cloud so cloud-init injects it into
-# ~/.ssh/authorized_keys on every provisioned server automatically.
-resource "hcloud_ssh_key" "cluster" {
-  name       = "${var.rke2_cluster_name}-deploy-key"
-  public_key = tls_private_key.ssh_identity.public_key_openssh
+locals {
+  # NOTE: Compute naming/labels once.
+  # Why: Keeps conventions consistent across resources and reduces repeated
+  #      string literals in the file.
+  ssh_key_name = "${var.rke2_cluster_name}-deploy-key"
 
-  labels = {
+  ssh_common_labels = {
     "managed-by"   = "opentofu"
     "cluster-name" = var.rke2_cluster_name
   }
+}
+
+# Upload the public half to Hetzner Cloud so cloud-init injects it into
+# ~/.ssh/authorized_keys on every provisioned server automatically.
+resource "hcloud_ssh_key" "cluster" {
+  name       = local.ssh_key_name
+  public_key = tls_private_key.ssh_identity.public_key_openssh
+
+  labels = local.ssh_common_labels
 }
 
 # SECURITY: local_sensitive_file prevents the private key from appearing
@@ -38,6 +47,6 @@ resource "local_sensitive_file" "ssh_private_key" {
   count = var.save_ssh_key_locally ? 1 : 0
 
   content         = tls_private_key.ssh_identity.private_key_openssh
-  filename        = "${var.rke2_cluster_name}-deploy-key"
+  filename        = local.ssh_key_name
   file_permission = "0600"
 }

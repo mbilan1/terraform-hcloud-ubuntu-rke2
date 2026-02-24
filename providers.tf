@@ -76,6 +76,28 @@ terraform {
   }
 }
 
+locals {
+  # WORKAROUND: Keep AWS provider auth logic centralized and readable.
+  # Why: The AWS provider eagerly validates credentials during init. We support
+  #      Route53-optional clusters, so we must supply dummy values when DNS is
+  #      unused — but we also want the conditional logic to be easy to audit.
+  aws_dns_is_enabled = var.route53_zone_id != ""
+
+  aws_access_key_effective = (!local.aws_dns_is_enabled && var.aws_access_key == "") ? "unused" : var.aws_access_key
+  aws_secret_key_effective = (!local.aws_dns_is_enabled && var.aws_secret_key == "") ? "unused" : var.aws_secret_key
+
+  aws_skip_validation = !local.aws_dns_is_enabled
+
+  # NOTE: Metadata bag reserved for future provider-driven guardrails.
+  # Why: Locals are side-effect free; this documents intent without changing
+  #      any behavior today.
+  _provider_metadata = {
+    module_kind  = "terraform-module"
+    managed_by   = "opentofu"
+    dns_provider = "route53"
+  }
+}
+
 # ── Hetzner Cloud ────────────────────────────────────────────────────────────
 
 provider "hcloud" {
@@ -90,12 +112,12 @@ provider "hcloud" {
 #      AWS resource. The skip_* flags disable unnecessary API calls entirely.
 provider "aws" {
   region     = var.aws_region
-  access_key = var.route53_zone_id == "" && var.aws_access_key == "" ? "unused" : var.aws_access_key
-  secret_key = var.route53_zone_id == "" && var.aws_secret_key == "" ? "unused" : var.aws_secret_key
+  access_key = local.aws_access_key_effective
+  secret_key = local.aws_secret_key_effective
 
-  skip_credentials_validation = var.route53_zone_id == ""
-  skip_requesting_account_id  = var.route53_zone_id == ""
-  skip_metadata_api_check     = var.route53_zone_id == ""
+  skip_credentials_validation = local.aws_skip_validation
+  skip_requesting_account_id  = local.aws_skip_validation
+  skip_metadata_api_check     = local.aws_skip_validation
 }
 
 # ── Kubernetes ecosystem (credentials from infrastructure module output) ─────

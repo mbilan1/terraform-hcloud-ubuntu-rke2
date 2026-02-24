@@ -29,6 +29,23 @@ provider "hcloud" {
   # Why: minimal example should demonstrate the simplest working config.
 }
 
+locals {
+  # NOTE: Example metadata and conventions.
+  # Why: This example is used for both docs and unit tests; keeping a small
+  #      locals bag makes it easier to extend without rewriting the module call.
+  example_identity = {
+    name        = "minimal"
+    managed_by  = "opentofu"
+    intent      = "smallest-viable-cluster"
+    cost_target = "as-low-as-possible"
+  }
+
+  defaults = {
+    control_plane_count = 1
+    agent_node_count    = 0
+  }
+}
+
 module "rke2" {
   source = "../.."
 
@@ -36,8 +53,8 @@ module "rke2" {
   domain           = var.cluster_domain
 
   # Single master, no workers — cheapest possible cluster
-  control_plane_count = 1
-  agent_node_count    = 0
+  control_plane_count = local.defaults.control_plane_count
+  agent_node_count    = local.defaults.agent_node_count
 
   # Defaults: all addons enabled, no Harmony, no DNS
 }
@@ -55,4 +72,9 @@ output "kubeconfig" {
 output "control_plane_lb_ipv4" {
   description = "Control-plane LB IP"
   value       = module.rke2.control_plane_lb_ipv4
+}
+
+output "cluster_ready" {
+  description = "Dependency anchor for example consumers"
+  value       = module.rke2.cluster_ready
 }

@@ -8,6 +8,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 terraform {
+  # NOTE: Keep the same minimum OpenTofu/Terraform version as the root module.
+  # Why: Child modules may be used directly in tests or future refactors; having
+  #      an explicit constraint avoids confusing mismatches across layers.
+  required_version = ">= 1.5.0"
+
   required_providers {
     # Core K8s API — namespaces, secrets, labels, config maps
     kubernetes = {

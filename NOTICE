@@ -1,0 +1,14 @@
+This repository contains an independently maintained Terraform/OpenTofu module.
+
+Acknowledgements / Upstream
+
+- This project started as an experimental fork of:
+  https://github.com/wenzel-felix/terraform-hcloud-rke2
+- Credit for the original baseline work belongs to the upstream author and
+  contributors.
+
+License notes
+
+- This repository is distributed under the MIT License (see LICENSE).
+- For clarity, the upstream MIT license text is preserved in:
+  LICENSES/MIT-upstream-wenzel-felix.txt
