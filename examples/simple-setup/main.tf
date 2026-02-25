@@ -1,3 +1,11 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Simple HA setup — 3 masters + 1 worker with RKE2 built-in ingress
+#
+# DECISION: This example demonstrates a basic HA cluster without Harmony.
+# Why: Shows the simplest production-capable configuration with SSH key
+#      export for manual node access and RKE2's built-in ingress controller.
+# ──────────────────────────────────────────────────────────────────────────────
+
 module "rke2" {
   source               = "../.."
   hcloud_api_token     = var.hcloud_api_token

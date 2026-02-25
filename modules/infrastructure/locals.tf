@@ -2,8 +2,8 @@
 # Infrastructure module — computed locals
 #
 # NOTE: Only infrastructure-related locals live here.
-# Addon-related locals (longhorn_s3_endpoint, SUC CRDs, etc.) live in
-# modules/addons/locals.tf.
+# L4 addon configuration (Helm values, chart versions) lives in charts/
+# and is managed via Helmfile/ArgoCD, not Terraform.
 # ──────────────────────────────────────────────────────────────────────────────
 
 locals {

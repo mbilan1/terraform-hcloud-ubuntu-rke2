@@ -26,7 +26,7 @@ It contains:
 
 An **OpenTofu/Terraform module** (NOT a root deployment) that deploys a production-oriented **RKE2 Kubernetes cluster on Hetzner Cloud** with optional Open edX (openedx-k8s-harmony) integration.
 
-- **IaC tool**: OpenTofu >= 1.5 — always use `tofu`, **never** `terraform`
+- **IaC tool**: OpenTofu >= 1.7.0 — always use `tofu`, **never** `terraform`
 - **Cloud provider**: Hetzner Cloud (EU data centers: Helsinki, Nuremberg, Falkenstein)
 - **Kubernetes distribution**: RKE2 (Rancher Kubernetes Engine v2)
 - **OS**: Ubuntu 24.04 LTS
@@ -53,7 +53,7 @@ An **OpenTofu/Terraform module** (NOT a root deployment) that deploys a producti
 1. **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** before any structural change
 2. **Run `tofu validate`** after any `.tf` file change to verify syntax
 3. **Run `tofu fmt -check`** to verify formatting (or `tofu fmt` to auto-fix)
-4. **Run `tofu test`** after any change to variables, guardrails, or conditional logic (84 tests, ~3s, $0)
+4. **Run `tofu test`** after any change to variables, guardrails, or conditional logic (57 tests, ~3s, $0)
 5. **Preserve existing code comments** — they document deliberate compromises
 6. **Read the relevant file before editing** — understand the dependency chain
 7. **Verify external claims via network** before suggesting or making changes (see [Verification Rules](#verification-rules-mandatory))
@@ -181,16 +181,16 @@ Actual deployments that **use** this module live in `examples/` or in separate r
 
 ### Root Terraform Files (Shim Layer)
 
-The root module is a **thin shim** containing zero resources. It wires two child modules together:
+The root module is a **thin shim** containing zero resources. It calls `module.infrastructure` and wires outputs:
 
 | File | Purpose |
-|------|---------|
-| `main.tf` | `module "infrastructure"` + `module "addons"` calls with variable routing |
-| `providers.tf` | All provider configurations (passed to child modules) |
+|------|---------||
+| `main.tf` | `module "infrastructure"` call + locals for location fallback |
+| `providers.tf` | Provider configurations (hcloud, aws, cloudinit, remote, tls, random, local) |
 | `variables.tf` | All user-facing input variables with descriptions, types, defaults, validations |
 | `output.tf` | Module outputs rewired to `module.infrastructure.*` |
 | `guardrails.tf` | All preflight `check {}` blocks (DNS, Harmony, Longhorn, self-maintenance, etc.) |
-| `moved.tf` | 52 `moved` blocks mapping old root addresses to `module.infrastructure.*` / `module.addons.*` |
+| `moved.tf` | 67 `moved` + `removed` blocks for state migration from previous architecture |
 
 ### Child Modules
 
@@ -200,7 +200,7 @@ The root module is a **thin shim** containing zero resources. It wires two child
 |------|---------|
 | `main.tf` | Server resources (masters, workers), random strings/passwords |
 | `cloudinit.tf` | `cloudinit_config` data sources for structured multipart cloud-init |
-| `ssh.tf` | Auto-generated RSA 4096 SSH key pair |
+| `ssh.tf` | Auto-generated ED25519 SSH key pair |
 | `network.tf` | Hetzner private network and subnet |
 | `firewall.tf` | Hetzner Cloud Firewall rules |
 | `load_balancer.tf` | Dual LB architecture (control-plane LB + ingress LB) |
@@ -213,32 +213,30 @@ The root module is a **thin shim** containing zero resources. It wires two child
 
 Templates and scripts live **inside** the module: `modules/infrastructure/templates/cloudinit/`, `modules/infrastructure/scripts/`.
 
-#### `modules/addons/` — Kubernetes Addon Stack
+#### `charts/` — Kubernetes Addon Stack (Helmfile)
 
-| File | Purpose | Always deployed? |
-|------|---------|:---:|
-| `main.tf` | Dependency anchor (`wait_for_infrastructure`) | Yes |
-| `hccm.tf` | Hetzner Cloud Controller Manager | Yes |
-| `csi.tf` | Hetzner CSI driver (persistent volumes) | Yes |
-| `certmanager.tf` | cert-manager + ClusterIssuer (Let's Encrypt) | Yes |
-| `longhorn.tf` | Longhorn distributed storage + S3 backup | Opt-in (`longhorn.preinstall`) |
-| `harmony.tf` | openedx-k8s-harmony chart + ingress-nginx | Opt-in (`harmony.enabled`) |
-| `ingress.tf` | RKE2 built-in ingress (when Harmony disabled) | Conditional |
-| `selfmaintenance.tf` | Kured + System Upgrade Controller | HA only (≥3 masters) |
-| `locals.tf` | SUC components, Longhorn S3, Harmony values | — |
-| `variables.tf` | Infra outputs + root passthrough inputs | — |
-| `outputs.tf` | `harmony_deployed`, `longhorn_deployed` | — |
-| `versions.tf` | `required_providers`: kubernetes, helm, kubectl, http | — |
+All Kubernetes addons are deployed via **Helmfile**, not via Terraform. This eliminates the chicken-and-egg problem of configuring kubernetes/helm providers inside the same Terraform apply that creates the cluster.
 
-Templates live **inside** the module: `modules/addons/templates/values/`, `modules/addons/templates/manifests/`.
+| Directory | Purpose |
+|-----------|---------||
+| `helmfile.yaml` | Addon deployment order, environment values, release definitions |
+| `hccm/` | Hetzner Cloud Controller Manager (values + API token secret) |
+| `cert-manager/` | cert-manager + ClusterIssuer (values + manifest) |
+| `longhorn/` | Longhorn distributed storage (values + iSCSI installer) |
+| `kured/` | Kured auto-reboot (values only) |
+| `system-upgrade-controller/` | K8s version upgrades (manifests + SUC plans) |
+| `harmony/` | openedx-k8s-harmony chart (values only) |
+| `ingress/` | RKE2 built-in ingress config (HelmChartConfig manifest) |
+| `README.md` | Operator guide for the Helmfile workflow |
 
 ### Other Directories
 
 | Path | Purpose |
 |------|---------|
 | `packer/` | Machine image build scaffold (Packer + Ansible) — OS hardening, package pre-install |
+| `charts/` | Kubernetes addon stack (Helmfile + per-addon values/manifests) — deployed OUTSIDE Terraform |
 | `docs/` | Architecture docs (`ARCHITECTURE.md`, `PLAN-operational-readiness.md`) — **READ `ARCHITECTURE.md` BEFORE ANY WORK** |
-| `examples/` | Example deployments (`simple-setup/`, `minimal/`, `rancher-setup/`, `openedx-tutor/`) |
+| `examples/` | Example deployments (`simple-setup/`, `minimal/`, `openedx-tutor/`) |
 | `tests/` | Unit test files (`*.tftest.hcl`) — see [tests/README.md](tests/README.md) |
 | `.github/workflows/` | CI workflow files (12 workflows) — see below |
 
@@ -267,34 +265,36 @@ All workflow files follow the naming convention `{category}-{tool}.yml`:
 
 | File | Tests | Scope |
 |------|:-----:|-------|
-| `variables.tftest.hcl` | 23 | Variable `validation {}` blocks (positive + negative) |
-| `guardrails.tftest.hcl` | 28 | Cross-variable `check {}` blocks (incl. Longhorn guardrails) |
-| `conditional_logic.tftest.hcl` | 31 | Resource count assertions for feature toggles (incl. Longhorn) |
+| `variables.tftest.hcl` | 21 | Variable `validation {}` blocks (positive + negative) |
+| `guardrails.tftest.hcl` | 13 | Cross-variable `check {}` blocks (incl. Longhorn guardrails) |
+| `conditional_logic.tftest.hcl` | 17 | Resource count assertions for feature toggles |
+| `firewall.tftest.hcl` | 4 | Firewall rule assertions (protocol, port, direction) |
 | `examples.tftest.hcl` | 2 | Full-stack example configurations |
-| **Total** | **84** | All tests use `mock_provider`, ~3s, $0 |
+| **Total** | **57** | All tests use `mock_provider`, ~3s, $0 |
 
 ---
 
 ## Architecture Constraints (from ARCHITECTURE.md — read the full document)
 
 ### Dependency Chain
-Addons deploy **sequentially** after cluster readiness. The infrastructure module (`modules/infrastructure/`) produces a `cluster_ready` output that the addons module (`modules/addons/`) consumes via a `terraform_data.wait_for_infrastructure` anchor:
+The infrastructure module (`modules/infrastructure/`) bootstraps the cluster and produces a kubeconfig. Kubernetes addons are then deployed separately via Helmfile (`charts/`):
 ```
-module.infrastructure: Network → Firewall → SSH → LBs → master-0
+module.infrastructure (Terraform): Network → Firewall → SSH → LBs → master-0
     → additional masters → workers → wait_for_api → wait_for_cluster_ready
     → kubeconfig fetch
 
-module.addons: wait_for_infrastructure → HCCM → CSI → cert-manager → Longhorn → Harmony
+charts/ (Helmfile, outside Terraform): HCCM → CSI → cert-manager → Longhorn → Harmony
 ```
 
-**Do NOT reorder** addon deployments — they have provider/resource dependencies.
+**Do NOT move addon deployment back into Terraform** — the L3/L4 separation is a deliberate design choice.
 
 ### Module Structure Rules
-- **Root module = shim** — contains zero resources, only module calls, provider configs, variables, guardrails, and `moved` blocks
+- **Root module = shim** — contains zero resources, only the `module.infrastructure` call, provider configs, variables, guardrails, and `moved` blocks
 - **All `check {}` blocks live in root `guardrails.tf`** — not in child modules (required for `tofu test` `expect_failures` addressing)
-- **Templates and scripts live INSIDE their child module** — use `${path.module}/templates/` and `${path.module}/scripts/` in `templatefile()` calls
-- **Providers configured in root only** — child modules declare `required_providers` but NOT `provider {}` blocks
-- **`moved.tf`** — 52 blocks mapping old root addresses to `module.infrastructure.*` / `module.addons.*`. Do NOT remove these until all known deployments have migrated.
+- **Templates and scripts live INSIDE the infrastructure module** — use `${path.module}/templates/` and `${path.module}/scripts/` in `templatefile()` calls
+- **Providers configured in root only** — the child module declares `required_providers` but NOT `provider {}` blocks
+- **`moved.tf`** — 67 blocks mapping old root addresses to `module.infrastructure.*` (plus `removed` blocks for deleted addon resources). Do NOT remove these until all known deployments have migrated.
+- **`charts/`** — all Kubernetes addons deployed via Helmfile, not Terraform. Do NOT add kubernetes/helm/kubectl providers back to the module.
 
 ### Cloud-Init Architecture
 - Server config (`config.yaml`) is written to disk via `cloudinit_config` `write_files` directive
@@ -310,18 +310,16 @@ module.addons: wait_for_infrastructure → HCCM → CSI → cert-manager → Lon
 
 ### DNS ↔ Harmony Coupling
 `create_dns_record = true` creates a Route53 wildcard pointing to the ingress LB.
-The ingress LB exists **only when** `harmony.enabled = true`.
+The ingress LB exists **only when** `harmony_enabled = true`.
 This is enforced by a preflight `check` in `guardrails.tf`.
 
 ### Harmony ↔ Ingress Exclusivity
-When `harmony.enabled = true`:
-- Harmony deploys its own ingress-nginx (DaemonSet + hostPort)
-- RKE2 built-in ingress is disabled via HelmChartConfig
-- `enable_nginx_modsecurity_waf` has no effect (known gap)
+When `harmony_enabled = true`:
+- Harmony deploys its own ingress-nginx (DaemonSet + hostPort) via `charts/harmony/`
+- RKE2 built-in ingress is disabled via HelmChartConfig (`charts/ingress/`)
 
-When `harmony.enabled = false`:
+When `harmony_enabled = false`:
 - RKE2 built-in ingress is used
-- ModSecurity WAF can be enabled
 
 ### master-0 Is Special
 - `master-0` bootstraps the entire cluster
@@ -330,11 +328,11 @@ When `harmony.enabled = false`:
 - SSH provisioners connect to master-0 for kubeconfig retrieval and readiness checks
 
 ### Provider Constraints
-- `gavinbunney/kubectl` provider is used for raw manifest application — do NOT change without live verification and explicit user approval
 - `hashicorp/cloudinit` provider is used for structured multipart cloud-init — do NOT replace with raw `templatefile()`
 - `terraform_data` (built-in) replaces all former `null_resource` usage — no `hashicorp/null` dependency
-- All providers are declared **inside** the module (known anti-pattern, extraction planned as breaking change)
+- All 7 providers are declared **inside** the module (known anti-pattern, extraction planned as breaking change)
 - Provider versions use `~>` pessimistic constraint — changing major versions is a breaking change
+- Kubernetes-level providers (kubernetes, helm, kubectl) are **not used** — addons are deployed via Helmfile in `charts/`
 
 ---
 
@@ -343,7 +341,7 @@ When `harmony.enabled = false`:
 - **HCL formatting**: `tofu fmt` canonical style
 - **Variable naming**: `snake_case` with descriptive names
 - **Comments**: inline `#` comments document compromises and non-obvious decisions — preserve them
-- **Helm values**: stored in `templates/values/*.yaml`, referenced via `templatefile()`
+- **Helm values**: stored in `charts/*/values.yaml`, managed via Helmfile (not Terraform)
 - **Variable blocks**: include `description`, `type`, `default` where applicable, `validation` blocks for constraints
 - **Outputs**: use `sensitive = true` for any credential-type outputs
 - **Resource naming**: prefixed with `var.cluster_name` for namespacing
@@ -434,11 +432,11 @@ Use the following structured comment prefixes to maintain a consistent style acr
 ### Examples
 
 ```hcl
-# COMPROMISE: Using gavinbunney/kubectl instead of hashicorp/kubernetes for raw manifests
-# Why: kubernetes provider doesn't support applying arbitrary YAML manifests.
-#      alekc/kubectl is a maintained fork with more features (v2.x), but migration
-#      is a breaking change requiring provider source swap + state surgery.
-# See: docs/ARCHITECTURE.md — Provider Constraints
+# DECISION: L3/L4 separation — addons managed via Helmfile, not Terraform
+# Why: Eliminates the chicken-and-egg problem of configuring kubernetes/helm
+#      providers inside the same apply that creates the cluster.
+#      Enables GitOps workflows (ArgoCD, Flux) for addon lifecycle.
+# See: docs/ARCHITECTURE.md — Module Architecture
 
 # WORKAROUND: Disabling RKE2 built-in ingress via HelmChartConfig
 # Why: When Harmony is enabled, it deploys its own ingress-nginx (DaemonSet + hostPort).
@@ -473,7 +471,7 @@ Use the following structured comment prefixes to maintain a consistent style acr
 3. **README.md has auto-generated sections** — `terraform-docs` generates the Providers/Resources/Inputs/Outputs tables between markers (`<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->`). Do NOT manually edit inside those markers.
 4. **`terraform.tfstate` should NEVER be committed** — it contains secrets. It is in `.gitignore`.
 5. **etcd quorum: 2 masters is worse than 1** — the module blocks `master_node_count = 2` with a validation rule
-6. **RKE2 version is unpinned** — installed from `stable` channel without explicit version. Different deploys at different times may get different K8s versions.
+6. **RKE2 version is pinned by default** — defaults to `v1.34.4+rke2r1`. Set `rke2_version = ""` to use the upstream `stable` channel (less reproducible).
 7. **Training data is stale** — provider versions, Helm chart versions, Hetzner server types, and Kubernetes API versions in your training data are likely outdated. Always verify via network before suggesting changes.
 8. **Questions ≠ change requests** — when the user asks "is this provider maintained?", do NOT immediately swap it. Answer the question, provide evidence, wait for instructions.
 

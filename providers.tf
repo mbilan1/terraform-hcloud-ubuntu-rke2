@@ -11,8 +11,7 @@
 # DECISION: L4 providers (kubernetes, helm, kubectl, http) removed.
 # Why: L4 (addon Helm charts, K8s resources) is managed outside Terraform
 #      via Helmfile/ArgoCD/Flux. Terraform owns only L3 (infrastructure).
-#      HCCM — the sole chicken-egg exception — deploys via cloud-init
-#      RKE2 HelmChart manifests, requiring no K8s providers.
+#      All addons — including HCCM — deploy via Helmfile after bootstrap.
 # See: docs/ARCHITECTURE.md — Layer Separation
 # ──────────────────────────────────────────────────────────────────────────────
 
