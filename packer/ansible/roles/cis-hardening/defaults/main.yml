@@ -137,6 +137,15 @@ ubtu24cis_sshd_client_alive_count_max: 3
 ubtu24cis_sudoers_exclude_nopasswd_list:
   - root
 
+# WORKAROUND: Disable CIS rule 5.4.2.5 (root PATH integrity check).
+# Why: The upstream UBUNTU24-CIS task accesses item.stat.pw_name on path entries
+#      that may not have that attribute (e.g. non-existent /snap/bin). This causes
+#      'dict has no attribute pw_name' on ansible-core 2.20. The root PATH on Hetzner
+#      Cloud images is standard and does not need remediation.
+# See: https://github.com/ansible-lockdown/UBUNTU24-CIS
+# TODO: Remove when upstream fixes the conditional in cis_5.4.2.x.yml:163.
+ubtu24cis_rule_5_4_2_5: false
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Section 6: Logging
 # ──────────────────────────────────────────────────────────────────────────────

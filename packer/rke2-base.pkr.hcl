@@ -42,9 +42,10 @@ variable "base_image" {
 }
 
 variable "server_type" {
+  # NOTE: cx22 was renamed to cx23 by Hetzner in 2025. Verified via API 2025-06.
   description = "Hetzner server type used as the temporary build instance. A small shared-CPU type is sufficient since the image is just installing packages."
   type        = string
-  default     = "cx22"
+  default     = "cx23"
 }
 
 variable "location" {
@@ -84,8 +85,10 @@ source "hcloud" "rke2_base" {
     "role"       = "rke2-base"
     "base-image" = var.base_image
     # NOTE: rke2-version label allows Terraform data source lookups like:
-    # data "hcloud_image" "rke2" { with_selector = "rke2-version=v1.34.4+rke2r1" }
-    "rke2-version" = var.kubernetes_version
+    # data "hcloud_image" "rke2" { with_selector = "rke2-version=v1.34.4-rke2r1" }
+    # WORKAROUND: Replace '+' with '-' because Hetzner labels only allow [a-z0-9._-].
+    # Why: RKE2 versions use '+' (e.g. v1.34.4+rke2r1) which is invalid in Hetzner labels.
+    "rke2-version" = replace(var.kubernetes_version, "+", "-")
     # NOTE: cis-hardened label allows operators to filter hardened vs unhardened snapshots.
     # data "hcloud_image" "rke2" { with_selector = "cis-hardened=true" }
     "cis-hardened"  = var.enable_cis_hardening ? "true" : "false"
@@ -103,14 +106,31 @@ build {
   # Why: galaxy_file only installs roles, not collections. We need both (community.general,
   #      ansible.posix) and the CIS role. The file provisioner + install-ansible.sh handles
   #      both via `ansible-galaxy collection install` and `ansible-galaxy role install`.
+  # WORKAROUND: Create destination directory before upload.
+  # Why: Packer file provisioner uses SCP which requires the target directory to exist.
+  provisioner "shell" {
+    inline = ["mkdir -p /tmp/packer-files/ansible"]
+  }
+
   provisioner "file" {
     source      = "ansible/"
-    destination = "/tmp/packer-files/ansible"
+    destination = "/tmp/packer-files/ansible/"
   }
 
   # Install Ansible + Galaxy dependencies on the build instance
   provisioner "shell" {
     script = "scripts/install-ansible.sh"
+  }
+
+  # Write Ansible extra-vars JSON file with boolean overrides for ansible-core 2.20+.
+  # WORKAROUND: Packer's extra_arguments mangles JSON with escaped quotes.
+  # Why: ansible-core 2.20 enforces strict boolean typing on `when:` conditionals.
+  #      key=value extra-vars pass strings — "false" is truthy in Python.
+  #      Writing a JSON file and referencing it with @file avoids escaping issues.
+  provisioner "shell" {
+    inline = [
+      "echo '{\"ubtu24cis_rule_5_4_2_5\": false}' > /tmp/ansible-overrides.json"
+    ]
   }
 
   # Run Ansible playbook for system preparation and optional CIS hardening.
@@ -124,7 +144,27 @@ build {
       "ansible/roles/rke2-base",
       "ansible/roles/cis-hardening",
     ]
-    extra_vars = "kubernetes_version=${var.kubernetes_version} enable_cis_hardening=${var.enable_cis_hardening}"
+    # WORKAROUND: Each extra-var must be passed as a separate --extra-vars flag.
+    # Why: Packer's extra_arguments array does not preserve spaces within a single
+    #      element. "key1=val1 key2=val2" gets split into separate CLI arguments,
+    #      causing ansible-playbook to error on the unrecognized second argument.
+    extra_arguments = [
+      "--extra-vars", "kubernetes_version=${var.kubernetes_version}",
+      "--extra-vars", "enable_cis_hardening=${var.enable_cis_hardening}",
+      # WORKAROUND: ansible-local provisioner does not set ansible_user automatically.
+      # Why: In local connection mode, Ansible does not populate ansible_user like it
+      #      does for SSH connections. The CIS role (UBUNTU24-CIS) references ansible_user
+      #      in task 5.4.1.1 to check password expiration for the connecting user.
+      #      Packer runs as root, so we explicitly set ansible_user=root.
+      # TODO: Remove if upstream UBUNTU24-CIS makes ansible_user optional.
+      "--extra-vars", "ansible_user=root",
+      # WORKAROUND: Disable CIS rule 5.4.2.5 — upstream bug with ansible-core 2.20.
+      # Why: The upstream task accesses item.stat.pw_name on stat results that may
+      #      lack this attribute (symlinks / non-existent paths).
+      #      JSON file with @-reference preserves boolean types and avoids Packer escaping.
+      # TODO: Remove when upstream UBUNTU24-CIS fixes cis_5.4.2.x.yml:163.
+      "--extra-vars", "@/tmp/ansible-overrides.json",
+    ]
   }
 
   # Clean up for snapshot
