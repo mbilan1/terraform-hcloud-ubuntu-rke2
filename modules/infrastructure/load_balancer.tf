@@ -180,7 +180,7 @@ resource "hcloud_load_balancer_service" "cp_ssh" {
 # ║  LB-2: Ingress (HTTP/HTTPS application traffic)                           ║
 # ║  Targets: Worker nodes only (ingress-nginx DaemonSet with hostPort)        ║
 # ║  Ports: 80 (HTTP), 443 (HTTPS), + additional custom ports                 ║
-# ║  Created only when harmony.enabled = true (ingress is needed)              ║
+# ║  Created only when harmony_enabled = true (ingress is needed)              ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 resource "hcloud_load_balancer" "ingress" {

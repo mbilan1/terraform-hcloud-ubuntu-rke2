@@ -15,7 +15,7 @@ Unit tests for the `terraform-hcloud-rke2` module using OpenTofu's native `tofu 
                ╱  Plan    ╲      tofu plan (examples/minimal) with real providers
               ╱────────────╲
              ╱              ╲    Gate 1: Unit Tests
-            ╱  84 unit tests ╲   tofu test + mock_provider, every PR, ~$0
+            ╱  57 unit tests ╲   tofu test + mock_provider, every PR, ~$0
            ╱──────────────────╲
           ╱                    ╲  Gate 0: Static Analysis
          ╱ fmt · validate ·     ╲ tflint · checkov · tfsec · kics
@@ -29,7 +29,7 @@ Unit tests for the `terraform-hcloud-rke2` module using OpenTofu's native `tofu 
 | **Offline-first** | All tests use `mock_provider` — zero cloud credentials, zero cost, ~3s total |
 | **Shift-left** | Catch misconfigurations at `plan` phase, not at `apply` (30min+ deploy) |
 | **100% validation coverage** | Every `validation {}` block tested with positive + negative cases |
-| **100% guardrail coverage** | Every `check {}` block tested (13/15 directly; 2 DNS checks documented as untestable) |
+| **100% guardrail coverage** | Every `check {}` block tested (13 directly; 2 DNS checks documented as untestable) |
 | **100% branch coverage** | Every conditional `count`/`for_each` tested for both enabled and disabled states |
 | **Deterministic** | No network calls, no randomness, no timing — same result every run |
 | **Self-documenting** | Each `run` block has a UT-ID comment header with rationale |
@@ -49,10 +49,10 @@ These areas require real infrastructure (E2E / integration tests) and are explic
 
 - **Provisioner execution** — `terraform_data.wait_for_api`, `terraform_data.wait_for_cluster_ready` use SSH `remote-exec` which cannot be mocked
 - **Cloud-init scripts** — `scripts/rke-master.sh.tpl`, `scripts/rke-worker.sh.tpl` are rendered but not executed
-- **Helm chart deployment** — mocked `helm_release` doesn't validate chart existence or values schema
 - **Actual K8s API reachability** — kubeconfig fetch, provider authentication against real cluster
 - **LB health checks** — Hetzner Cloud LB health check behavior
 - **DNS resolution** — Route53 record propagation
+- **Addon deployment** — Kubernetes addons are deployed via Helmfile (`charts/`), outside Terraform
 
 ## Quick Start
 
@@ -68,14 +68,15 @@ All tests run **offline** with mocked providers — no cloud credentials, no inf
 
 | File | Tests | Scope |
 |------|:-----:|-------|
-| `variables.tftest.hcl` | 23 | Variable validations — every `validation {}` block tested with positive + negative cases |
-| `guardrails.tftest.hcl` | 28 | Cross-variable guardrails — every `check {}` block tested (incl. etcd backup and Longhorn guardrails; 2 DNS untestable) |
-| `conditional_logic.tftest.hcl` | 31 | Resource count assertions for all conditional branches (harmony, masters, workers, LB, SSH, cert-manager, HCCM, CSI, kured, Longhorn) |
+| `variables.tftest.hcl` | 21 | Variable validations — every `validation {}` block tested with positive + negative cases |
+| `guardrails.tftest.hcl` | 13 | Cross-variable guardrails — every `check {}` block tested (2 DNS untestable) |
+| `conditional_logic.tftest.hcl` | 17 | Resource count assertions for all conditional branches (harmony, masters, workers, LB, SSH, DNS, etcd backup) |
+| `firewall.tftest.hcl` | 4 | Firewall rule assertions (Canal VXLAN, WireGuard, internal TCP) |
 | `examples.tftest.hcl` | 2 | Full-stack configuration patterns (minimal, OpenEdX-Tutor) |
-| **Total** | **84** | |
+| **Total** | **57** | |
 
 > **Note:** 2 DNS check blocks (`dns_requires_zone_id`, `dns_requires_harmony_ingress`) cannot be tested
-> with mock providers — the downstream `aws_route53_record` triggers uncatchable provider schema  
+> with mock providers — the downstream `aws_route53_record` triggers uncatchable provider schema
 > errors. See the comment in `guardrails.tftest.hcl` for details.
 
 ## Architecture
@@ -85,7 +86,7 @@ All tests run **offline** with mocked providers — no cloud credentials, no inf
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
 │  .tftest.hcl │────▶│  tofu test   │────▶│  mock_provider   │
-│  (test cases)│     │  command=plan│     │  (all 11 provs)  │
+│  (test cases)│     │  command=plan│     │  (all 7 provs)   │
 └─────────────┘     └──────────────┘     └─────────────────┘
                            │
                     ┌──────┴──────┐
@@ -98,20 +99,16 @@ All tests run **offline** with mocked providers — no cloud credentials, no inf
                     └─────────────┘
 ```
 
-All 11 providers are mocked at the file level:
+All 7 providers are mocked at the file level:
 
 ```hcl
 mock_provider "hcloud" {}
 mock_provider "remote" {}
 mock_provider "aws" {}
-mock_provider "kubectl" {}
-mock_provider "kubernetes" {}
-mock_provider "helm" {}
-mock_provider "null" {}
+mock_provider "cloudinit" {}
 mock_provider "random" {}
 mock_provider "tls" {}
 mock_provider "local" {}
-mock_provider "http" {}
 ```
 
 ### Test Categories
@@ -120,58 +117,58 @@ mock_provider "http" {}
 
 Tests that each `validation {}` block in `variables.tf` correctly accepts valid input and rejects invalid input.
 
-Covers: `domain`, `master_node_count`, `cluster_name`, `rke2_cni`, `additional_lb_service_ports`, `network_address`, `subnet_address`, `cluster_configuration.hcloud_csi.reclaim_policy`, `ssh_allowed_cidrs`, `k8s_api_allowed_cidrs`.
+Covers: `cluster_domain`, `control_plane_count`, `rke2_cluster_name`, `cni_plugin`, `extra_lb_ports`, `hcloud_network_cidr`, `subnet_address`, `ssh_allowed_cidrs`, `k8s_api_allowed_cidrs`.
 
 #### 2. Guardrails / Check Blocks (UT-G*)
 
 Tests that `check {}` blocks produce warnings for inconsistent variable combinations.
 
-Covers: `aws_credentials_pair_consistency`, `letsencrypt_email_required_when_issuer_enabled`, `system_upgrade_controller_version_format`, `remote_manifest_downloads_required_for_selected_features`, `rke2_version_format_when_pinned`, `auto_updates_require_ha`, `harmony_requires_cert_manager`, `harmony_requires_workers_for_lb`, `etcd_backup_requires_s3_config`, `longhorn_csi_default_storage_conflict`, `longhorn_experimental_warning`, `longhorn_backup_requires_s3_config`, `longhorn_requires_minimum_workers`, `dns_requires_zone_id`, `dns_requires_harmony_ingress`.
+Covers: `aws_credentials_pair_consistency`, `workers_must_not_mix_countries`, `kubernetes_version` format, `harmony_requires_workers_for_lb`, `etcd_backup_requires_s3_config`, `dns_requires_zone_id` (untestable), `dns_requires_harmony_ingress` (untestable).
 
 #### 3. Conditional Logic (UT-C*)
 
 Tests that conditional `count` and `for_each` expressions produce expected resource counts for all major feature toggles.
 
-Covers: Harmony on/off, master counts (1/3/5), worker counts (0/N), SSH on LB, cert-manager, HCCM, CSI, SSH key file, DNS, ingress LB targets, kured/self-maintenance, pre-upgrade snapshots, Longhorn on/off, Longhorn S3 secret, Longhorn outputs.
+Covers: Harmony on/off, master counts (1/3/5), worker counts (0/N), SSH on LB, SSH key file, DNS, ingress LB targets, control-plane LB, output values, pre-upgrade snapshots, etcd backup.
 
-#### 4. Example Validation (UT-E*)
+#### 4. Firewall Rules (UT-F*)
+
+Tests that firewall rules are correctly defined for required ports and protocols.
+
+Covers: Canal VXLAN (UDP 8472), Canal WireGuard (UDP 51820/51821), essential internal TCP rules, VXLAN not open to internet.
+
+#### 5. Example Validation (UT-E*)
 
 Tests that example configurations in `examples/` produce valid plans.
 
 ## Coverage Traceability
 
-| Feature | Variables | Guardrail | Conditional | Total |
-|---------|:---------:|:---------:|:-----------:|:-----:|
-| Domain validation | 1 | — | — | 1 |
-| Master count (etcd quorum) | 3 | — | 2 | 5 |
-| Cluster name format | 4 | — | — | 4 |
-| CNI selection | 2 | — | — | 2 |
-| LB ports | 3 | — | — | 3 |
-| Network CIDR | 2 | — | — | 2 |
-| Subnet CIDR | 1 | — | — | 1 |
-| CSI reclaim policy | 2 | — | 1 | 3 |
-| SSH CIDRs | 1 | — | — | 1 |
-| K8s API CIDRs | 2 | — | — | 2 |
-| AWS credentials | — | 3 | — | 3 |
-| Let's Encrypt email | — | 2 | — | 2 |
-| SUC version format | — | 2 | — | 2 |
-| Remote manifests | — | 2 | — | 2 |
-| RKE2 version format | — | 3 | — | 3 |
-| Auto-updates + HA | — | 2 | 2 | 4 |
-| Harmony | — | 2 | 4 | 6 |
-| Workers | — | — | 2 | 2 |
-| SSH on LB | — | — | 2 | 2 |
-| cert-manager | — | — | 2 | 2 |
-| HCCM | — | — | 1 | 1 |
-| SSH key file | — | — | 2 | 2 |
-| DNS | — | 2 | 1 | 3 |
-| Ingress LB targets | — | — | 1 | 1 |
-| Control-plane LB | — | — | 1 | 1 |
-| Output: ingress_lb_ipv4 | — | — | 1 | 1 |
-| etcd backup | — | 3 | 2 | 5 |
-| Longhorn | — | 6 | 6 | 12 |
-| Example: minimal | — | — | — | 1 |
-| Example: openedx-tutor | — | — | — | 1 |
+| Feature | Variables | Guardrail | Conditional | Firewall | Total |
+|---------|:---------:|:---------:|:-----------:|:--------:|:-----:|
+| Domain validation | 1 | — | — | — | 1 |
+| Master count (etcd quorum) | 3 | — | 2 | — | 5 |
+| Cluster name format | 4 | — | — | — | 4 |
+| CNI selection | 2 | — | — | — | 2 |
+| LB ports | 3 | — | — | — | 3 |
+| Network CIDR | 2 | — | — | — | 2 |
+| Subnet CIDR | 1 | — | — | — | 1 |
+| SSH CIDRs | 1 | — | — | — | 1 |
+| K8s API CIDRs | 2 | — | — | — | 2 |
+| AWS credentials | — | 3 | — | — | 3 |
+| Workers country policy | — | 3 | — | — | 3 |
+| Kubernetes version format | — | 3 | — | — | 3 |
+| Harmony | — | 1 | 4 | — | 5 |
+| Workers | — | — | 2 | — | 2 |
+| SSH on LB | — | — | 2 | — | 2 |
+| SSH key file | — | — | 2 | — | 2 |
+| DNS | — | — | 1 | — | 1 |
+| Ingress LB targets | — | — | 1 | — | 1 |
+| Control-plane LB | — | — | 1 | — | 1 |
+| Output: ingress_lb_ipv4 | — | — | 1 | — | 1 |
+| etcd backup | — | 3 | 3 | — | 6 |
+| Firewall (Canal, internal) | — | — | — | 4 | 4 |
+| Example: minimal | — | — | — | — | 1 |
+| Example: openedx-tutor | — | — | — | — | 1 |
 
 ## CI Integration
 
@@ -235,14 +232,12 @@ mock_provider "remote" {
 | Limitation | Reason | Impact |
 |-----------|--------|--------|
 | DNS check blocks not testable | `aws_route53_record` schema rejects empty `zone_id` at provider level — not catchable by `expect_failures` | 2 of 15 check blocks tested only via code review |
-| `kured_not_deployed_on_single_master` uses `expect_failures` | Setting `enable_auto_os_updates=true` + `master_node_count=1` triggers `check.auto_updates_require_ha` warning alongside the conditional count | Cannot assert `length(helm_release.kured) == 0` in same run block that expects a check failure |
-| Mock providers do not validate Helm chart values | `helm_release` with mocked provider accepts any values without schema checking | Helm values correctness requires E2E tests |
 
 ## Adding New Tests
 
 1. Choose the appropriate file based on what you're testing
-2. Follow the naming convention: `UT-V*` for variables, `UT-G*` for guardrails, `UT-C*` for conditional logic, `UT-E*` for examples
-3. Always set required variables (`hetzner_token`, `domain`) in every `run` block
+2. Follow the naming convention: `UT-V*` for variables, `UT-G*` for guardrails, `UT-C*` for conditional logic, `UT-F*` for firewall, `UT-E*` for examples
+3. Always set required variables (`hcloud_api_token`, `cluster_domain`) in every `run` block
 4. Use `expect_failures` for negative tests (validation rejections, check block warnings)
 5. Use `assert {}` for positive tests (resource count, output values)
 6. Run `tofu test` locally before pushing
@@ -254,25 +249,23 @@ mock_provider "remote" {
 | ID | Test Name | Type | Target |
 |----|-----------|:----:|--------|
 | UT-V01 | `defaults_pass_validation` | ✅ positive | All defaults |
-| UT-V02 | `domain_rejects_empty_string` | ❌ negative | `var.domain` |
-| UT-V03 | `master_count_rejects_two` | ❌ negative | `var.master_node_count` |
-| UT-V04 | `master_count_accepts_one` | ✅ positive | `var.master_node_count` |
-| UT-V05 | `master_count_accepts_three` | ✅ positive | `var.master_node_count` |
-| UT-V06 | `master_count_accepts_five` | ✅ positive | `var.master_node_count` |
-| UT-V07a | `cluster_name_rejects_uppercase` | ❌ negative | `var.cluster_name` |
-| UT-V07b | `cluster_name_rejects_hyphens` | ❌ negative | `var.cluster_name` |
-| UT-V07c | `cluster_name_rejects_too_long` | ❌ negative | `var.cluster_name` |
-| UT-V07d | `cluster_name_accepts_valid` | ✅ positive | `var.cluster_name` |
-| UT-V08a | `rke2_cni_rejects_invalid` | ❌ negative | `var.rke2_cni` |
-| UT-V08b | `rke2_cni_accepts_cilium` | ✅ positive | `var.rke2_cni` |
-| UT-V09a | `lb_ports_rejects_zero` | ❌ negative | `var.additional_lb_service_ports` |
-| UT-V09b | `lb_ports_rejects_too_large` | ❌ negative | `var.additional_lb_service_ports` |
-| UT-V09c | `lb_ports_accepts_valid` | ✅ positive | `var.additional_lb_service_ports` |
-| UT-V10a | `network_address_rejects_invalid` | ❌ negative | `var.network_address` |
-| UT-V10b | `network_address_accepts_valid` | ✅ positive | `var.network_address` |
+| UT-V02 | `domain_rejects_empty_string` | ❌ negative | `var.cluster_domain` |
+| UT-V03 | `master_count_rejects_two` | ❌ negative | `var.control_plane_count` |
+| UT-V04 | `master_count_accepts_one` | ✅ positive | `var.control_plane_count` |
+| UT-V05 | `master_count_accepts_three` | ✅ positive | `var.control_plane_count` |
+| UT-V06 | `master_count_accepts_five` | ✅ positive | `var.control_plane_count` |
+| UT-V07a | `rke2_cluster_name_rejects_uppercase` | ❌ negative | `var.rke2_cluster_name` |
+| UT-V07b | `rke2_cluster_name_rejects_hyphens` | ❌ negative | `var.rke2_cluster_name` |
+| UT-V07c | `rke2_cluster_name_rejects_too_long` | ❌ negative | `var.rke2_cluster_name` |
+| UT-V07d | `rke2_cluster_name_accepts_valid` | ✅ positive | `var.rke2_cluster_name` |
+| UT-V08a | `cni_plugin_rejects_invalid` | ❌ negative | `var.cni_plugin` |
+| UT-V08b | `cni_plugin_accepts_cilium` | ✅ positive | `var.cni_plugin` |
+| UT-V09a | `lb_ports_rejects_zero` | ❌ negative | `var.extra_lb_ports` |
+| UT-V09b | `lb_ports_rejects_too_large` | ❌ negative | `var.extra_lb_ports` |
+| UT-V09c | `lb_ports_accepts_valid` | ✅ positive | `var.extra_lb_ports` |
+| UT-V10a | `hcloud_network_cidr_rejects_invalid` | ❌ negative | `var.hcloud_network_cidr` |
+| UT-V10b | `hcloud_network_cidr_accepts_valid` | ✅ positive | `var.hcloud_network_cidr` |
 | UT-V11 | `subnet_address_rejects_invalid` | ❌ negative | `var.subnet_address` |
-| UT-V12a | `reclaim_policy_rejects_invalid` | ❌ negative | `var.cluster_configuration` |
-| UT-V12b | `reclaim_policy_accepts_retain` | ✅ positive | `var.cluster_configuration` |
 | UT-V13a | `ssh_cidrs_rejects_invalid` | ❌ negative | `var.ssh_allowed_cidrs` |
 | UT-V13b | `k8s_api_cidrs_rejects_empty` | ❌ negative | `var.k8s_api_allowed_cidrs` |
 | UT-V13c | `k8s_api_cidrs_rejects_invalid` | ❌ negative | `var.k8s_api_allowed_cidrs` |
@@ -284,31 +277,16 @@ mock_provider "remote" {
 | UT-G01a | `aws_credentials_rejects_partial` | ❌ negative | `check.aws_credentials_pair_consistency` |
 | UT-G01b | `aws_credentials_accepts_both_set` | ✅ positive | `check.aws_credentials_pair_consistency` |
 | UT-G01c | `aws_credentials_accepts_both_empty` | ✅ positive | `check.aws_credentials_pair_consistency` |
-| UT-G02a | `letsencrypt_email_required_with_route53` | ❌ negative | `check.letsencrypt_email_required_when_issuer_enabled` |
-| UT-G02b | `letsencrypt_email_passes_when_set` | ✅ positive | `check.letsencrypt_email_required_when_issuer_enabled` |
-| UT-G03a | `suc_version_rejects_v_prefix` | ❌ negative | `check.system_upgrade_controller_version_format` |
-| UT-G03b | `suc_version_accepts_valid` | ✅ positive | `check.system_upgrade_controller_version_format` |
-| UT-G04a | `remote_downloads_required_for_k8s_updates` | ❌ negative | `check.remote_manifest_downloads_required_for_selected_features` |
-| UT-G04b | `remote_downloads_passes_when_enabled` | ✅ positive | `check.remote_manifest_downloads_required_for_selected_features` |
-| UT-G05a | `rke2_version_rejects_bad_format` | ❌ negative | `check.rke2_version_format_when_pinned` |
-| UT-G05b | `rke2_version_accepts_empty` | ✅ positive | `check.rke2_version_format_when_pinned` |
-| UT-G05c | `rke2_version_accepts_valid_format` | ✅ positive | `check.rke2_version_format_when_pinned` |
-| UT-G06a | `auto_updates_warns_on_single_master` | ❌ negative | `check.auto_updates_require_ha` |
-| UT-G06b | `auto_updates_passes_on_ha` | ✅ positive | `check.auto_updates_require_ha` |
-| UT-G07 | `harmony_requires_cert_manager` | ❌ negative | `check.harmony_requires_cert_manager` |
+| UT-G10a | `workers_country_policy_passes_germany` | ✅ positive | `check.workers_must_not_mix_countries` |
+| UT-G10b | `workers_country_policy_passes_finland` | ✅ positive | `check.workers_must_not_mix_countries` |
+| UT-G10c | `workers_country_policy_rejects_mixed` | ❌ negative | `check.workers_must_not_mix_countries` |
+| UT-G05a | `kubernetes_version_rejects_bad_format` | ❌ negative | `var.kubernetes_version` |
+| UT-G05b | `kubernetes_version_accepts_empty` | ✅ positive | `var.kubernetes_version` |
+| UT-G05c | `kubernetes_version_accepts_valid_format` | ✅ positive | `var.kubernetes_version` |
 | UT-G08 | `harmony_requires_workers` | ❌ negative | `check.harmony_requires_workers_for_lb` |
 | UT-G09a | `etcd_backup_rejects_missing_s3` | ❌ negative | `check.etcd_backup_requires_s3_config` |
 | UT-G09b | `etcd_backup_passes_with_s3` | ✅ positive | `check.etcd_backup_requires_s3_config` |
 | UT-G09c | `etcd_backup_passes_when_disabled` | ✅ positive | `check.etcd_backup_requires_s3_config` |
-| UT-G14a | `longhorn_and_csi_both_default_rejects` | ❌ negative | `check.longhorn_csi_default_storage_conflict` |
-| UT-G14b | `longhorn_default_csi_not_default_passes` | ✅ positive | `check.longhorn_csi_default_storage_conflict` |
-| UT-G15a | `longhorn_experimental_warning_fires` | ❌ negative | `check.longhorn_experimental_warning` |
-| UT-G15b | `longhorn_experimental_warning_does_not_fire_when_disabled` | ✅ positive | `check.longhorn_experimental_warning` |
-| UT-G16a | `longhorn_backup_rejects_missing_s3` | ❌ negative | `check.longhorn_backup_requires_s3_config` |
-| UT-G16b | `longhorn_backup_passes_with_s3` | ✅ positive | `check.longhorn_backup_requires_s3_config` |
-| UT-G16c | `longhorn_backup_passes_without_target` | ✅ positive | `check.longhorn_backup_requires_s3_config` |
-| UT-G17a | `longhorn_rejects_insufficient_workers` | ❌ negative | `check.longhorn_requires_minimum_workers` |
-| UT-G17b | `longhorn_passes_with_enough_workers` | ✅ positive | `check.longhorn_requires_minimum_workers` |
 | — | *(dns_requires_zone_id)* | ⚠️ skipped | See [Known Limitations](#known-limitations) |
 | — | *(dns_requires_harmony_ingress)* | ⚠️ skipped | See [Known Limitations](#known-limitations) |
 
@@ -316,37 +294,32 @@ mock_provider "remote" {
 
 | ID | Test Name | Asserts |
 |----|-----------|---------|
-| UT-C01 | `harmony_disabled_no_ingress_lb` | ingress LB=0, harmony namespace=0, harmony helm=0 |
-| UT-C02 | `harmony_enabled_creates_ingress_lb` | ingress LB=1, harmony namespace=1, harmony helm=1 |
-| UT-C03 | `harmony_disables_builtin_ingress` | ingress_configuration=0 |
-| UT-C04 | `harmony_disabled_uses_builtin_ingress` | ingress_configuration=1 |
+| UT-C01 | `harmony_disabled_no_ingress_lb` | ingress LB=0, ingress LB service/target=0 |
+| UT-C02 | `harmony_enabled_creates_ingress_lb` | ingress LB=1, ingress LB service/target=created |
 | UT-C05 | `single_master_no_additional` | additional_masters=0, master=1 |
 | UT-C06 | `ha_cluster_creates_additional_masters` | additional_masters=4 (for count=5) |
 | UT-C07 | `zero_workers` | worker=0 |
 | UT-C08 | `workers_correct_count` | worker=5 |
 | UT-C09 | `ssh_on_lb_disabled_by_default` | cp_ssh=0 |
 | UT-C10 | `ssh_on_lb_enabled` | cp_ssh=1 |
-| UT-C11 | `certmanager_disabled` | cert_manager namespace=0, helm=0 |
-| UT-C12 | `certmanager_enabled_by_default` | cert_manager namespace=1, helm=1 |
-| UT-C13 | `hccm_disabled` | hcloud_ccm secret=0, hccm helm=0 |
-| UT-C14 | `csi_disabled` | hcloud_csi helm=0 |
 | UT-C15 | `ssh_key_file_disabled_by_default` | ssh_private_key=0 |
 | UT-C16 | `ssh_key_file_enabled` | ssh_private_key=1 |
 | UT-C17 | `dns_disabled_by_default` | wildcard record=0 |
-| UT-C18 | `ingress_lb_targets_match_workers` | ingress_workers=4 |
+| UT-C18 | `ingress_lb_targets_match_workers` | ingress_workers=4 (when harmony enabled) |
 | UT-C19 | `control_plane_lb_always_exists` | cp LB name="rke2-cp-lb" |
 | UT-C20 | `output_ingress_null_when_harmony_disabled` | ingress_lb_ipv4=null |
-| UT-C21 | `kured_not_deployed_on_single_master` | expect_failures: auto_updates check |
-| UT-C22 | `kured_deployed_on_ha_with_auto_updates` | kured helm=1, kured namespace=1 |
 | UT-C25 | `pre_upgrade_snapshot_disabled_by_default` | pre_upgrade_snapshot=0 |
 | UT-C26 | `pre_upgrade_snapshot_enabled_with_etcd_backup` | pre_upgrade_snapshot=1 |
-| UT-C27 | `outputs_reflect_backup_state` | etcd_backup_enabled, longhorn_enabled, storage_driver outputs |
-| UT-C28 | `longhorn_disabled_by_default` | longhorn namespace=0, longhorn helm=0 |
-| UT-C29 | `longhorn_enabled_creates_resources` | longhorn namespace=1, longhorn helm=1 |
-| UT-C30a | `longhorn_s3_secret_not_created_without_backup` | longhorn s3 secret=0 |
-| UT-C30b | `longhorn_s3_secret_created_with_backup` | longhorn s3 secret=1 |
-| UT-C31a | `longhorn_outputs_reflect_enabled_state` | longhorn_enabled=true, storage_driver="longhorn" |
-| UT-C31b | `longhorn_outputs_reflect_disabled_state` | longhorn_enabled=false, storage_driver="hcloud-csi" |
+| UT-C27 | `outputs_reflect_backup_state` | etcd_backup_enabled output |
+
+### Firewall Rules (firewall.tftest.hcl)
+
+| ID | Test Name | Asserts |
+|----|-----------|---------|
+| UT-F01 | `firewall_has_canal_vxlan_udp_8472` | UDP 8472 rule exists |
+| UT-F02 | `firewall_vxlan_not_open_to_internet` | VXLAN rule has private-only source |
+| UT-F03 | `firewall_has_canal_wireguard_udp_51820_51821` | UDP 51820-51821 rule exists |
+| UT-F04 | `firewall_has_essential_internal_tcp_rules` | Internal TCP rules exist |
 
 ### Example Patterns (examples.tftest.hcl)
 
