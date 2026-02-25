@@ -40,9 +40,9 @@ What happened in practice? Include the first failing error line.
 - Example used (`examples/minimal`, `examples/openedx-tutor`, custom):
 - Hetzner locations (`node_locations`):
 - Control plane / worker counts:
-- `harmony.enabled`:
+- `harmony_enabled`:
 - `create_dns_record`:
-- `cluster_configuration.longhorn.preinstall`:
+- `cluster_configuration.etcd_backup.enabled`:
 
 ## Logs and diagnostics
 

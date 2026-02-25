@@ -206,7 +206,7 @@ The module's core is **Ubuntu + RKE2** — a production-oriented Kubernetes clus
 The **openedx-k8s-harmony** chart integration is the module's primary adoption target. The built-in compatibility with [Open edX](https://openedx.org/) community standards (ClusterIssuer naming, IngressClass conventions, cert-manager version alignment, proxy-body-size defaults) is a tribute to the Open edX community and a reflection of the module's origin: deploying production Open edX instances on Kubernetes with best practices and security.
 
 > **⚠️ First deploy warning**: The module still needs production hardening after bootstrap:
-> - defaults create `master_node_count = 3`, `worker_node_count = 3` (HA baseline)
+> - defaults create `control_plane_count = 3`, `agent_node_count = 3` (HA baseline)
 > - `harmony_enabled = false` by default — enable Harmony explicitly for Open edX
 > - `ssh_allowed_cidrs` and `k8s_api_allowed_cidrs` default to `0.0.0.0/0` (open to the internet)
 >

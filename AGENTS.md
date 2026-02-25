@@ -470,7 +470,7 @@ Use the following structured comment prefixes to maintain a consistent style acr
 2. **`null_resource` provisioners are not idempotent** — re-running may trigger SSH operations
 3. **README.md has auto-generated sections** — `terraform-docs` generates the Providers/Resources/Inputs/Outputs tables between markers (`<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->`). Do NOT manually edit inside those markers.
 4. **`terraform.tfstate` should NEVER be committed** — it contains secrets. It is in `.gitignore`.
-5. **etcd quorum: 2 masters is worse than 1** — the module blocks `master_node_count = 2` with a validation rule
+5. **etcd quorum: 2 masters is worse than 1** — the module blocks `control_plane_count = 2` with a validation rule
 6. **RKE2 version is pinned by default** — defaults to `v1.34.4+rke2r1`. Set `rke2_version = ""` to use the upstream `stable` channel (less reproducible).
 7. **Training data is stale** — provider versions, Helm chart versions, Hetzner server types, and Kubernetes API versions in your training data are likely outdated. Always verify via network before suggesting changes.
 8. **Questions ≠ change requests** — when the user asks "is this provider maintained?", do NOT immediately swap it. Answer the question, provide evidence, wait for instructions.

@@ -793,8 +793,8 @@ resource "null_resource" "cluster_health_check" {
 
   provisioner "file" {
     content = templatefile("${path.module}/scripts/health-check.sh.tpl", {
-      EXPECTED_NODES    = var.master_node_count + var.worker_node_count
-      LONGHORN_ENABLED  = var.cluster_configuration.longhorn.preinstall
+      EXPECTED_NODES    = var.control_plane_count + var.agent_node_count
+      LONGHORN_ENABLED  = var.cluster_configuration.etcd_backup.enabled
       HEALTH_CHECK_URLS = var.health_check_urls
     })
     destination = "/tmp/health-check.sh"
