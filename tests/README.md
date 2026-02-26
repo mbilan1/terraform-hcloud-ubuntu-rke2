@@ -103,7 +103,7 @@ All 7 providers are mocked at the file level:
 
 ```hcl
 mock_provider "hcloud" {}
-mock_provider "remote" {}
+mock_provider "external" {}
 mock_provider "aws" {}
 mock_provider "cloudinit" {}
 mock_provider "random" {}
@@ -213,18 +213,12 @@ mock_provider "hcloud" {
 }
 ```
 
-### Remote file empty content
+### External data source (kubeconfig)
 
-`data.remote_file.kubeconfig` content is parsed by `yamldecode()` in `locals.tf`. The mock must return empty string to trigger the safe branch (`content == "" ? "" : base64decode(...)`):
+`data.external.kubeconfig` calls a bash script (`fetch_kubeconfig.sh`) that SSHs to master-0 and retrieves the kubeconfig. In tests, the `external` provider is auto-mocked — `data.external.kubeconfig.result` returns an empty map, and `try(base64decode(...), "")` in `locals.tf` produces an empty string safely:
 
 ```hcl
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = {
-      content = ""
-    }
-  }
-}
+mock_provider "external" {}
 ```
 
 ## Known Limitations

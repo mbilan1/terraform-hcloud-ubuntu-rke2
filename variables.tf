@@ -142,7 +142,7 @@ variable "enforce_single_country_workers" {
 }
 
 variable "extra_lb_ports" {
-  description = "Additional TCP ports to expose on the management load balancer beyond those needed for the K8s API and RKE2 join (e.g. [8080, 8443])."
+  description = "Additional TCP ports to expose on the ingress load balancer (requires harmony_enabled=true). These ports are forwarded to worker nodes, not the control-plane management LB (e.g. [8080, 8443])."
   type        = list(number)
   nullable    = false
   default     = []
@@ -161,6 +161,33 @@ variable "extra_lb_ports" {
 # managed via Helmfile/ArgoCD. See charts/harmony/ for values.
 variable "harmony_enabled" {
   description = "Enable Harmony integration: creates the ingress load balancer and disables RKE2 built-in ingress. Harmony chart deployment is managed externally (Helmfile/ArgoCD)."
+  type        = bool
+  nullable    = false
+  default     = false
+}
+
+# DECISION: OpenBao as an optional secrets management layer (experimental).
+# Why: The default kubeconfig retrieval uses data \"external\" + SSH (simple, no
+#      extra dependencies). This is secure — SSH key is ephemeral, output is
+#      marked sensitive — but the kubeconfig ends up in Terraform state.
+#      Operators who need enterprise-grade secrets management (audit log,
+#      RBAC, auto-rotation, team access) can enable OpenBao in the cluster.
+#
+# SECURITY DISCLAIMER:
+#   With openbao_enabled = false (default), kubeconfig security is the
+#   OPERATOR'S responsibility:
+#     - Terraform state contains the kubeconfig (protect with encrypted backend + ACL)
+#     - `tofu output -raw kube_config` prints it to stdout (do not pipe to logs)
+#     - The SSH private key exists only in state (never written to disk unless
+#       save_ssh_key_locally = true)
+#   The module does NOT guarantee that credentials never leak — it marks outputs
+#   as sensitive and uses ephemeral channels, but the operator must secure the
+#   state file and output handling.
+#
+# See: charts/openbao/ for Helmfile deployment
+# See: docs/ARCHITECTURE.md — OpenBao Integration
+variable "openbao_enabled" {
+  description = "[EXPERIMENTAL] Enable OpenBao (open-source Vault) deployment in the cluster for secrets management. Generates a bootstrap token for initial operator access. Requires agent_node_count >= 1 and enable_secrets_encryption = true."
   type        = bool
   nullable    = false
   default     = false
@@ -195,6 +222,15 @@ variable "hcloud_network_zone" {
   type        = string
   nullable    = false
   default     = "eu-central"
+
+  # DECISION: Validate against known Hetzner network zones.
+  # Why: Invalid zone causes cryptic API errors at apply time.
+  #      Early validation gives immediate, actionable feedback.
+  # See: https://docs.hetzner.cloud/#networks
+  validation {
+    condition     = contains(["eu-central", "us-east", "us-west", "ap-southeast"], var.hcloud_network_zone)
+    error_message = "hcloud_network_zone must be one of: eu-central, us-east, us-west, ap-southeast."
+  }
 }
 
 variable "health_check_urls" {
@@ -241,25 +277,6 @@ variable "k8s_api_allowed_cidrs" {
   }
 }
 
-# DECISION: Pin RKE2 to v1.34.x (latest Rancher-supported line, ~8 months support remaining)
-# Why: Unpinned installs from 'stable' channel produce non-reproducible clusters.
-#      v1.34 is the newest line in the SUSE Rancher support matrix (v1.32–v1.34).
-#      v1.35 is not yet in the support matrix. v1.32 is at EOL (~Feb 2026).
-# See: https://www.suse.com/suse-rancher/support-matrix/
-# See: https://github.com/rancher/rke2/releases/tag/v1.34.4%2Brke2r1
-variable "kubernetes_version" {
-  description = "Specific RKE2 release tag to deploy (e.g. 'v1.34.4+rke2r1'). Leave empty to pull the latest from the stable channel."
-  type        = string
-  nullable    = false
-  default     = "v1.34.4+rke2r1"
-
-  validation {
-    # NOTE: Allow empty string for "stable channel" installs.
-    condition     = var.kubernetes_version == "" || can(regex("^v\\d+\\.\\d+\\.\\d+\\+rke2r\\d+$", var.kubernetes_version))
-    error_message = "kubernetes_version must look like 'vX.Y.Z+rke2rN' (or be empty)."
-  }
-}
-
 variable "load_balancer_location" {
   description = "Hetzner datacenter location where both load balancers will be provisioned (e.g. 'hel1', 'nbg1', 'fsn1')"
   type        = string
@@ -272,13 +289,6 @@ variable "load_balancer_location" {
   }
 }
 
-variable "master_node_image" {
-  description = "OS image identifier for control-plane servers (e.g. 'ubuntu-24.04')"
-  type        = string
-  nullable    = false
-  default     = "ubuntu-24.04"
-}
-
 variable "master_node_locations" {
   description = "Optional list of Hetzner locations to place control-plane nodes. If empty, node_locations is used. Why: allows masters spread across multiple cities while keeping workers in a subset (e.g., Germany-only)."
   type        = list(string)
@@ -287,7 +297,7 @@ variable "master_node_locations" {
 }
 
 variable "master_node_server_type" {
-  description = "Hetzner Cloud server type for control-plane nodes (e.g. 'cx22', 'cx32', 'cx42')."
+  description = "Hetzner Cloud server type for control-plane nodes (e.g. 'cx23', 'cx33', 'cx43')."
   type        = string
   nullable    = false
   default     = "cx23"
@@ -337,7 +347,7 @@ variable "save_ssh_key_locally" {
 # Why default to open (0.0.0.0/0) instead of closed ([]):
 #
 # 1. The module uses terraform_data provisioners (wait_for_api, wait_for_cluster_ready)
-#    and data.remote_file (kubeconfig) that SSH into master[0] over its PUBLIC IP.
+#    and data.external (kubeconfig fetch script) that SSH into master[0] over its PUBLIC IP.
 #    If SSH is blocked by the firewall, `tofu apply` hangs indefinitely.
 #
 # 2. Auto-detecting the runner's IP via `data "http"` is fragile:
@@ -390,13 +400,6 @@ variable "subnet_address" {
   }
 }
 
-variable "worker_node_image" {
-  description = "OS image identifier for agent (worker) servers"
-  type        = string
-  nullable    = false
-  default     = "ubuntu-24.04"
-}
-
 variable "worker_node_locations" {
   description = "Optional list of Hetzner locations to place worker nodes. If empty, node_locations is used. Why: lets you keep workload I/O local (e.g., Germany-only) while masters can span more regions."
   type        = list(string)
@@ -405,7 +408,7 @@ variable "worker_node_locations" {
 }
 
 variable "worker_node_server_type" {
-  description = "Hetzner Cloud server type for worker nodes (e.g. 'cx22', 'cx32', 'cx42')."
+  description = "Hetzner Cloud server type for worker nodes (e.g. 'cx23', 'cx33', 'cx43')."
   type        = string
   nullable    = false
   default     = "cx23"

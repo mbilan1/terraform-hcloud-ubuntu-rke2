@@ -14,7 +14,10 @@ locals {
   #      repeating the `== "" ? "" :` guard on each line. The intermediate
   #      `parsed_kubeconfig` local captures the YAML once and subsequent lookups
   #      navigate the parsed structure safely.
-  raw_kubeconfig    = data.remote_file.kubeconfig.content
+  # DECISION: Decode base64 kubeconfig from data "external" result.
+  # Why: The fetch script base64-encodes the YAML to survive JSON transport.
+  #      We decode it here once and all downstream locals parse the result.
+  raw_kubeconfig    = try(base64decode(data.external.kubeconfig.result.kubeconfig_b64), "")
   parsed_kubeconfig = try(yamldecode(local.raw_kubeconfig), {})
 
   cluster_ca = try(

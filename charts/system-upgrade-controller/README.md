@@ -12,6 +12,6 @@
 #
 # Alternatively, use kustomize or ArgoCD to apply the manifests directory.
 
-# Common configuration (referenced by plan manifests):
-suc_version: "0.14.2"
+# Common configuration:
+# NOTE: SUC version is centralized in charts/versions.yaml (key: suc).
 kubernetes_channel: "https://update.rke2.io/v1-release/channels"

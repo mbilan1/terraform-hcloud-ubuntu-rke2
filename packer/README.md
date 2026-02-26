@@ -33,6 +33,7 @@ When `enable_cis_hardening=true`, the build additionally applies:
 | NetworkManager (3.1.2) | Hetzner uses netplan/systemd-networkd; NM conflicts with network autoconfiguration |
 | Bootloader password | Hetzner Cloud VPS has no physical console |
 | SUID bit removal (7.1.13) | Some K8s components require SUID |
+| SSH PermitRootLogin (5.2.x) | CIS hardens SSH to deny root login, but RKE2 bootstrap **requires** `PermitRootLogin prohibit-password` for Terraform SSH provisioners (kubeconfig fetch, readiness checks). Cloud-init scripts override this at boot time. See `modules/infrastructure/scripts/rke-master.sh.tpl` and `rke-worker.sh.tpl`. |
 
 ### UFW + Kubernetes Port Matrix
 

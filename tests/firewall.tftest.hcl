@@ -61,11 +61,8 @@ mock_provider "hcloud" {
   }
 }
 
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = { content = "" }
-  }
-}
+# NOTE: data "external" — mock not needed, provider auto-mocked.
+mock_provider "external" {}
 
 mock_provider "aws" {}
 mock_provider "cloudinit" {}

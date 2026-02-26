@@ -67,6 +67,9 @@ module "infrastructure" {
   # Harmony toggle (controls ingress LB creation + cloud-init ingress disable)
   harmony_enabled = var.harmony_enabled
 
+  # OpenBao toggle (generates bootstrap token when enabled)
+  openbao_enabled = var.openbao_enabled
+
   # Cloud-init / RKE2 config
   kubernetes_version        = var.kubernetes_version
   cni_plugin                = var.cni_plugin

@@ -100,3 +100,26 @@ check "harmony_requires_workers_for_lb" {
     error_message = "Harmony routes HTTP/HTTPS through worker node targets on the ingress LB. Set agent_node_count >= 1 when harmony_enabled = true, or traffic will not reach ingress-nginx."
   }
 }
+
+# ── OpenBao guardrails ────────────────────────────────────────────────────────
+
+check "openbao_requires_workers" {
+  assert {
+    # DECISION: OpenBao pods must schedule on worker nodes.
+    # Why: Running vault workloads on control-plane nodes is an anti-pattern —
+    #      it mixes security-critical services with cluster management.
+    condition     = !var.openbao_enabled || var.agent_node_count > 0
+    error_message = "openbao_enabled = true requires agent_node_count >= 1. OpenBao pods need worker nodes to schedule on."
+  }
+}
+
+check "openbao_requires_secrets_encryption" {
+  assert {
+    # DECISION: OpenBao's unseal key is stored in a K8s Secret.
+    # Why: Without etcd encryption at rest, the unseal key is stored in plaintext
+    #      in etcd — defeating the purpose of running a secrets manager.
+    #      RKE2's secrets-encryption config encrypts all Secrets in etcd (AES-CBC/GCM).
+    condition     = !var.openbao_enabled || var.enable_secrets_encryption
+    error_message = "openbao_enabled = true requires enable_secrets_encryption = true. The OpenBao unseal key is stored as a K8s Secret — without etcd encryption, it would be in plaintext."
+  }
+}

@@ -1,6 +1,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Provider declarations — root-level configuration passed to child modules
 #
+# NOTE: Provider version constraints are listed in the VERSION REGISTRY
+#       table in versions.tf. They MUST remain as string literals here
+#       (OpenTofu limitation — required_providers does not support variables).
+#       When updating a constraint, also update the table in versions.tf.
+#
 # DECISION: All providers configured exclusively in the root module.
 # Why: OpenTofu/Terraform best practice — child modules (modules/infrastructure)
 #      declare required_providers for version constraints only, but never
@@ -26,39 +31,50 @@ terraform {
 
   required_providers {
     # ── Hetzner Cloud platform ──────────────────────────────────────────────
+    # NOTE: Exact version pin. See versions.tf for the version registry.
     hcloud = {
       source  = "hetznercloud/hcloud"
-      version = ">= 1.44.0, < 2.0.0"
+      version = "= 1.60.1"
     }
 
     # ── AWS (Route53 DNS only) ──────────────────────────────────────────────
+    # NOTE: Exact version pin. See versions.tf for the version registry.
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0.0"
+      version = "= 6.33.0"
     }
 
     # ── Server bootstrap and provisioning ───────────────────────────────────
+    # NOTE: Exact version pins. See versions.tf for the version registry.
     cloudinit = {
       source  = "hashicorp/cloudinit"
-      version = ">= 2.3.0, < 3.0.0"
+      version = "= 2.3.7"
     }
-    remote = {
-      source  = "tenstad/remote"
-      version = ">= 0.2.0, < 1.0.0"
+    # DECISION: tenstad/remote provider removed, replaced by hashicorp/external.
+    # Why: Kubeconfig retrieval now uses data "external" + bash script
+    #      (scripts/fetch_kubeconfig.sh). Zero third-party providers needed.
+    # See: modules/infrastructure/data.tf, modules/infrastructure/scripts/fetch_kubeconfig.sh
+
+    # ── Kubeconfig retrieval ────────────────────────────────────────────────
+    # NOTE: Exact version pin. See versions.tf for the version registry.
+    external = {
+      source  = "hashicorp/external"
+      version = "= 2.3.5"
     }
 
     # ── Cryptography, randomness, local filesystem ──────────────────────────
+    # NOTE: Exact version pins. See versions.tf for the version registry.
     tls = {
       source  = "hashicorp/tls"
-      version = ">= 4.0.0, < 5.0.0"
+      version = "= 4.2.1"
     }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.5.0, < 4.0.0"
+      version = "= 3.8.1"
     }
     local = {
       source  = "hashicorp/local"
-      version = ">= 2.4.0, < 3.0.0"
+      version = "= 2.7.0"
     }
   }
 }

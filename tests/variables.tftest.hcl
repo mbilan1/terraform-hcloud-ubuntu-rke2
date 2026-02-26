@@ -57,16 +57,9 @@ mock_provider "hcloud" {
   }
 }
 
-# WORKAROUND: remote_file mock must return empty content to avoid yamldecode()
-# failure in locals.tf kubeconfig parsing. Empty string triggers the safe
-# conditional branch: `content == "" ? "" : base64decode(yamldecode(...))`.
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = {
-      content = ""
-    }
-  }
-}
+# NOTE: data "external" returns a result map with kubeconfig_b64 key.
+# Empty string produces empty kubeconfig via try() fallback in locals.tf.
+mock_provider "external" {}
 
 mock_provider "aws" {}
 mock_provider "cloudinit" {}

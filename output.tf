@@ -74,3 +74,16 @@ output "etcd_backup_enabled" {
   description = "Whether automated etcd snapshots with S3 upload are enabled"
   value       = var.cluster_configuration.etcd_backup.enabled
 }
+
+# --- OpenBao (experimental) ---
+
+output "openbao_bootstrap_token" {
+  description = "[EXPERIMENTAL] One-time bootstrap token for initial OpenBao access. Used as devRootToken in charts/openbao/values.yaml. REVOKE immediately after configuring permanent auth (OIDC/LDAP/UserPass). Null when openbao_enabled = false."
+  value       = module.infrastructure.openbao_bootstrap_token
+  sensitive   = true
+}
+
+output "openbao_url" {
+  description = "[EXPERIMENTAL] OpenBao API/UI endpoint. Operator accesses this URL with the bootstrap token to retrieve kubeconfig and manage secrets. Null when openbao_enabled = false."
+  value       = var.openbao_enabled ? "https://vault.${var.cluster_domain}" : null
+}

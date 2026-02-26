@@ -77,7 +77,10 @@ source "hcloud" "rke2_base" {
   image       = var.base_image
   location    = var.location
   server_type = var.server_type
-  server_name = "packer-rke2-base"
+  # DECISION: Include timestamp in server_name to prevent conflicts.
+  # Why: Parallel builds with the same server_name fail in Hetzner API.
+  #      Using {{timestamp}} ensures unique names per build invocation.
+  server_name = "packer-rke2-base-{{timestamp}}"
 
   snapshot_name = "${var.image_name}-{{timestamp}}"
   snapshot_labels = {

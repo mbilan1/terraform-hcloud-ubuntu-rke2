@@ -42,6 +42,7 @@ spec:
                 systemctl start iscsid
               fi
               echo "iSCSI is ready"
+          # NOTE: Version registered in charts/versions.yaml (key: alpine_iscsi_init).
           image: alpine:3.17
           securityContext:
             privileged: true
@@ -54,4 +55,5 @@ spec:
           # WORKAROUND: Do not use the pause image here.
           # Why: registry.k8s.io/pause does not contain /bin/sh, so the
           #      DaemonSet enters CrashLoopBackOff after initContainer finishes.
+          # NOTE: Version registered in charts/versions.yaml (key: alpine_iscsi_sleep).
           image: alpine:3.19

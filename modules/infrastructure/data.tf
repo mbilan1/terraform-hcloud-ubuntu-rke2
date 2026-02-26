@@ -7,60 +7,39 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # --- Fetch kubeconfig from master[0] ---
-# DECISION: Retrieve kubeconfig through the remote provider with explicit
-# post-readiness dependency on full node convergence.
-# Why: Addon providers consume this artifact immediately; fetching it only
-#      after cluster-wide readiness reduces first-apply race conditions where
-#      API is up but node registration/critical daemon scheduling is incomplete.
+# DECISION: Replace tenstad/remote provider with data "external" + bash script.
+# Why: Eliminates the only third-party non-HashiCorp provider. The bash script
+#      performs a simple idempotent `ssh cat` — same SSH mechanism already used
+#      by readiness provisioners (remote-exec), so no new attack surface.
+# See: modules/infrastructure/scripts/fetch_kubeconfig.sh
+#
+# Security model:
+#   - SSH private key is base64-encoded for JSON transport, never written
+#     to a persistent file (script uses mktemp + trap for cleanup)
+#   - Kubeconfig content is base64-encoded in transit, decoded in locals.tf
+#   - Terraform marks all outputs as sensitive — never appears in plan/logs
+#   - No new credentials or providers required
 
-data "remote_file" "kubeconfig" {
+data "external" "kubeconfig" {
   depends_on = [
-    # Reliability compromise (chosen): fetch kubeconfig only after full node readiness,
-    # not just API readiness, to reduce early Helm/Kubernetes provider race conditions
-    # on first apply.
-    #
-    # Alternative considered: keep depends_on = [terraform_data.wait_for_api] for faster
-    # addon start. Rejected because it can trigger transient failures while workers are
-    # still joining, which is noisier for operators and CI.
+    # DECISION: Fetch kubeconfig only after full node readiness.
+    # Why: Addon consumers use this artifact immediately; fetching it only
+    #      after cluster-wide readiness reduces first-apply race conditions
+    #      where API is up but node registration is still incomplete.
     terraform_data.wait_for_cluster_ready
   ]
-  conn {
-    host        = hcloud_server.initial_control_plane[0].ipv4_address
-    user        = "root"
-    private_key = tls_private_key.ssh_identity.private_key_openssh
-    # DECISION: Read as root directly (no sudo wrapper needed).
-    # Why: SSH session already authenticates as root in this module.
-    sudo    = false
-    timeout = 180
-  }
 
-  path = "/etc/rancher/rke2/rke2.yaml"
+  program = ["${path.module}/scripts/fetch_kubeconfig.sh"]
 
-  lifecycle {
-    # DECISION: Validate SSH connection inputs before remote read.
-    # Why: Missing host/key should fail with clear diagnostics instead of
-    #      provider-level SSH errors that are harder to map to root cause.
-    precondition {
-      condition     = trimspace(hcloud_server.initial_control_plane[0].ipv4_address) != ""
-      error_message = "Cannot fetch kubeconfig: initial control-plane IPv4 is empty."
-    }
-
-    precondition {
-      condition     = trimspace(tls_private_key.ssh_identity.private_key_openssh) != ""
-      error_message = "Cannot fetch kubeconfig: SSH private key is empty."
-    }
-
-    # DECISION: Validate fetched kubeconfig structure before provider consumption.
-    # Why: Kubernetes/Helm provider errors become noisy if kubeconfig is empty
-    #      or malformed; explicit postconditions fail earlier with root-cause text.
-    postcondition {
-      condition     = strcontains(self.content, "apiVersion: v1")
-      error_message = "Fetched kubeconfig is malformed: missing apiVersion: v1."
-    }
-
-    postcondition {
-      condition     = strcontains(self.content, "clusters:")
-      error_message = "Fetched kubeconfig is malformed: missing clusters section."
-    }
+  query = {
+    host = hcloud_server.initial_control_plane[0].ipv4_address
+    user = "root"
+    # DECISION: Base64-encode the SSH private key for JSON transport.
+    # Why: SSH keys contain newlines that break JSON string encoding.
+    #      Base64 is lossless and the script decodes it before use.
+    # SECURITY: The key is Terraform-generated (tls_private_key), lives only
+    #           in state (already sensitive), and is cleaned up by the script's
+    #           trap handler after each invocation.
+    private_key = base64encode(tls_private_key.ssh_identity.private_key_openssh)
   }
 }

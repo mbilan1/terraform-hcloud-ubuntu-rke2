@@ -80,6 +80,14 @@ output "cluster_ready" {
   value       = terraform_data.wait_for_cluster_ready.id
 }
 
+# --- OpenBao (experimental) ---
+
+output "openbao_bootstrap_token" {
+  description = "One-time bootstrap token for initial OpenBao access. REVOKE after first use."
+  value       = var.openbao_enabled ? random_password.openbao_bootstrap_token[0].result : null
+  sensitive   = true
+}
+
 # --- Control-plane LB name (used in tests) ---
 
 output "control_plane_lb_name" {
@@ -105,6 +113,7 @@ output "_test_counts" {
     dns_record           = length(aws_route53_record.wildcard)
     ingress_lb_targets   = length(hcloud_load_balancer_target.ingress_workers)
     pre_upgrade_snapshot = length(terraform_data.pre_upgrade_snapshot)
+    openbao_token        = length(random_password.openbao_bootstrap_token)
   }
 }
 

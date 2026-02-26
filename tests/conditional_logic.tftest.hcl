@@ -54,13 +54,9 @@ mock_provider "hcloud" {
   }
 }
 
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = {
-      content = ""
-    }
-  }
-}
+# NOTE: data "external" returns a result map with kubeconfig_b64 key.
+# Empty string produces empty kubeconfig via try() fallback in locals.tf.
+mock_provider "external" {}
 
 mock_provider "aws" {}
 mock_provider "cloudinit" {}
@@ -387,5 +383,53 @@ run "outputs_reflect_backup_state" {
   assert {
     condition     = output.etcd_backup_enabled == true
     error_message = "etcd_backup_enabled output must be true when etcd backup is enabled."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C28: OpenBao disabled — no bootstrap token created                     ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "openbao_disabled_no_token" {
+  command = plan
+
+  variables {
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    openbao_enabled  = false
+  }
+
+  assert {
+    condition     = module.infrastructure._test_counts.openbao_token == 0
+    error_message = "Bootstrap token should not be created when openbao is disabled."
+  }
+
+  assert {
+    condition     = output.openbao_url == null
+    error_message = "openbao_url output must be null when openbao is disabled."
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-C29: OpenBao enabled — bootstrap token created                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "openbao_enabled_creates_token" {
+  command = plan
+
+  variables {
+    cluster_domain            = "example.com"
+    hcloud_api_token          = "mock-token"
+    openbao_enabled           = true
+    enable_secrets_encryption = true
+    agent_node_count          = 3
+  }
+
+  assert {
+    condition     = module.infrastructure._test_counts.openbao_token == 1
+    error_message = "Bootstrap token must be created when openbao is enabled."
+  }
+
+  assert {
+    condition     = output.openbao_url == "https://vault.example.com"
+    error_message = "openbao_url must point to vault.cluster_domain when openbao is enabled."
   }
 }

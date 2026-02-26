@@ -13,7 +13,7 @@ terraform {
 
   required_providers {
     # NOTE: Only the hcloud provider is needed at the example level.
-    # All other providers (aws, cloudinit, remote, tls, random, local) are
+    # All other providers (aws, cloudinit, tls, random, local) are
     # declared inside the module and configured via passthrough variables.
     hcloud = {
       source  = "hetznercloud/hcloud"

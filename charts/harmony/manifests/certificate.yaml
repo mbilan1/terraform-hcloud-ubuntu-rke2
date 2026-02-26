@@ -1,0 +1,28 @@
+# Harmony default TLS bootstrap certificate
+#
+# WORKAROUND: Harmony's built-in echo Ingress is HTTP-only (no spec.tls).
+# Why: ingress-nginx will otherwise serve its self-signed "Fake Certificate" for
+#      the HTTPS catch-all vhost, which looks like a broken platform.
+#      Issuing a real cert for the cluster domain and configuring ingress-nginx
+#      with --default-ssl-certificate fixes the UX without requiring Tutor/Open edX.
+# See: https://kubernetes.github.io/ingress-nginx/user-guide/tls/#default-ssl-certificate
+# See: https://cert-manager.io/docs/usage/certificate/
+#
+# NOTE: Replace CLUSTER_DOMAIN with the actual domain before deploying.
+# The secretName must match the ingress-nginx default-ssl-certificate value
+# in harmony/values.yaml (harmony/harmony-default-tls).
+#
+# NOTE: The namespace must exist before applying this manifest.
+# Helmfile creates the "harmony" namespace via createNamespace: true.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: harmony-default-tls
+  namespace: harmony
+spec:
+  secretName: harmony-default-tls
+  dnsNames:
+    - "CLUSTER_DOMAIN"
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer

@@ -56,16 +56,9 @@ mock_provider "hcloud" {
   }
 }
 
-# WORKAROUND: remote_file mock must return empty content to avoid yamldecode()
-# failure in locals.tf kubeconfig parsing. Empty string triggers the safe
-# conditional branch: `content == "" ? "" : base64decode(yamldecode(...))`.
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = {
-      content = ""
-    }
-  }
-}
+# NOTE: data "external" returns a result map with kubeconfig_b64 key.
+# Empty string produces empty kubeconfig via try() fallback in locals.tf.
+mock_provider "external" {}
 
 mock_provider "aws" {}
 mock_provider "cloudinit" {}
@@ -269,5 +262,55 @@ run "etcd_backup_passes_when_disabled" {
         enabled = false
       }
     }
+  }
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G14: openbao_requires_workers                                          ║
+# ║  OpenBao enabled without workers → warning                                 ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "openbao_requires_workers" {
+  command = plan
+
+  variables {
+    cluster_domain   = "example.com"
+    hcloud_api_token = "mock-token"
+    agent_node_count = 0
+    openbao_enabled  = true
+  }
+
+  expect_failures = [check.openbao_requires_workers]
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G15: openbao_requires_secrets_encryption                               ║
+# ║  OpenBao enabled without secrets encryption → warning                      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "openbao_requires_secrets_encryption" {
+  command = plan
+
+  variables {
+    cluster_domain            = "example.com"
+    hcloud_api_token          = "mock-token"
+    openbao_enabled           = true
+    enable_secrets_encryption = false
+  }
+
+  expect_failures = [check.openbao_requires_secrets_encryption]
+}
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  UT-G16: openbao_passes_with_valid_config                                  ║
+# ║  OpenBao enabled with workers + encryption → pass                          ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+run "openbao_passes_with_valid_config" {
+  command = plan
+
+  variables {
+    cluster_domain            = "example.com"
+    hcloud_api_token          = "mock-token"
+    agent_node_count          = 3
+    openbao_enabled           = true
+    enable_secrets_encryption = true
   }
 }

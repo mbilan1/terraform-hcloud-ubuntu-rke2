@@ -81,24 +81,23 @@ automatically via `needs:`):
 
 If upgrading from a version where Terraform managed addons:
 
+> **NOTE:** Do NOT run `tofu state rm` manually. The module contains `removed {}`
+> blocks that automatically drop addon resources from state without destroying
+> live Kubernetes objects. Manual `state rm` before `apply` can cause those
+> blocks to silently no-op, leaving state inconsistent on rollback.
+
 ```bash
-# 1. Import existing Helm releases into Helmfile state
-#    (Helmfile detects existing releases automatically)
-
-# 2. Remove addon resources from Terraform state
-tofu state rm 'module.addons.helm_release.cloud_controller["primary"]'
-tofu state rm 'module.addons.helm_release.certificate_manager["cert-manager"]'
-tofu state rm 'module.addons.helm_release.longhorn[0]'
-tofu state rm 'module.addons.helm_release.reboot_daemon["kured"]'
-tofu state rm 'module.addons.helm_release.harmony["harmony"]'
-# ... (see migration guide in docs/)
-
-# 3. Apply Terraform (no addon changes)
+# 1. Update module source to the new version (with removed {} blocks)
+# 2. Run tofu apply — removed {} blocks handle state cleanup automatically
 tofu apply
 
-# 4. Deploy via Helmfile
-helmfile apply
+# 3. Deploy addons via Helmfile
+helmfile -f helmfile.yaml apply
 ```
+
+> **WARNING:** This is a one-way migration. After `tofu apply` removes addon
+> resources from state, rolling back to the old module version requires manual
+> `tofu import` of every addon resource. Plan accordingly.
 
 ## ArgoCD / Flux Integration
 

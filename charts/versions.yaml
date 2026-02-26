@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Centralized version registry — single source of truth for all chart versions
+#
+# DECISION: All Helm chart and component versions defined in one file.
+# Why: Scattered version strings across helmfile.yaml are hard to audit,
+#      update, and review. A single file makes upgrades a one-line diff,
+#      simplifies CI version-bump PRs, and gives operators a clear overview.
+#
+# NOTE: Terraform-managed versions (RKE2, providers) live in variables.tf.
+#       This file covers only L4 (Kubernetes addon) versions managed by Helmfile.
+#
+# To update a version:
+#   1. Check the upstream release page (links below)
+#   2. Update the version string here
+#   3. Run `helmfile diff` to preview changes
+#   4. Run `helmfile sync` to apply
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Helm Chart Versions ──────────────────────────────────────────────────────
+
+# Hetzner Cloud Controller Manager
+# See: https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases
+hccm: "1.30.1"
+
+# cert-manager — TLS certificate automation
+# See: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+cert_manager: "v1.19.4"
+
+# Longhorn — distributed block storage
+# See: https://artifacthub.io/packages/helm/longhorn/longhorn
+longhorn: "1.11.0"
+
+# Kured — Kubernetes reboot daemon
+# See: https://github.com/kubereboot/charts/releases
+kured: "5.11.0"
+
+# Harmony — Open edX Kubernetes integration
+# See: https://github.com/openedx/openedx-k8s-harmony/releases
+harmony: "0.10.0"
+
+# ── Non-Helm Component Versions ─────────────────────────────────────────────
+
+# System Upgrade Controller (deployed via raw manifests, not Helm)
+# See: https://github.com/rancher/system-upgrade-controller/releases
+suc: "0.14.2"
+
+# ── Container Image Tags ────────────────────────────────────────────────────
+# NOTE: These are used in raw Kubernetes manifests (not Helmfile-templated).
+#       Update the tags here AND in the corresponding manifest files.
+# See: longhorn/manifests/iscsi-installer.yaml
+
+# Alpine image for iSCSI initContainer (installs open-iscsi via nsenter)
+alpine_iscsi_init: "3.17"
+
+# Alpine image for iSCSI sleep container (keeps DaemonSet pod alive)
+alpine_iscsi_sleep: "3.19"
+
+# OpenBao — secrets management (EXPERIMENTAL)
+# See: https://artifacthub.io/packages/helm/openbao/openbao
+# See: https://github.com/openbao/openbao-helm/releases
+openbao: "0.25.6"
