@@ -1,0 +1,204 @@
+---
+# Default variables for cis-hardening wrapper role
+#
+# DECISION: Wrapper role around ansible-lockdown/UBUNTU24-CIS with RKE2-safe defaults.
+# Why: The upstream CIS role has 1300+ lines of defaults. Many controls conflict
+#      with Kubernetes networking (UFW vs CNI iptables), container runtime paths
+#      (containerd/kubelet file ownership), and RKE2 systemd units. This wrapper
+#      sets safe overrides and adds post-CIS Kubernetes port allow-rules.
+# See: https://github.com/ansible-lockdown/UBUNTU24-CIS/blob/main/defaults/main.yml
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CIS Benchmark scope
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Level 1 only — Level 2 deferred until tested with RKE2 stack.
+# Why: Level 2 includes auditd, AIDE, and restrictive mount options that may
+#      conflict with containerd, kubelet, and etcd. Incremental hardening approach.
+ubtu24cis_level_1: true
+ubtu24cis_level_2: false
+
+# NOTE: Section 4 (host-based firewall) is DISABLED — see vars/main.yml.
+# All other sections are enabled at Level 1.
+ubtu24cis_section1: true
+ubtu24cis_section2: true
+ubtu24cis_section3: true
+# ubtu24cis_section4 is set in vars/main.yml (false) — do not set here.
+ubtu24cis_section5: true
+ubtu24cis_section6: true
+ubtu24cis_section7: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Build-time settings
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Skip reboot and audit during Packer build.
+# Why: Packer creates a snapshot — there is no persistent runtime to reboot into.
+#      Audit (goss-based) requires a running system and is meaningless at build time.
+skip_reboot: true
+setup_audit: false
+run_audit: false
+audit_only: false
+
+# Not running in a container or EC2
+system_is_ec2: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 1: Filesystem & Boot
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Keep AppArmor in enforce mode.
+# Why: RKE2 is fully compatible with AppArmor enforce. Open edX codejail
+#      requires AppArmor for sandboxed code execution.
+ubtu24cis_apparmor_disable: false
+ubtu24cis_apparmor_mode: enforce
+
+# DECISION: Do not require bootloader password.
+# Why: Hetzner Cloud servers are headless VPS — there is no physical console
+#      or boot menu. GRUB password would lock operators out of recovery.
+ubtu24cis_ask_passwd_to_boot: false
+ubtu24cis_set_grub_user_pass: false
+ubtu24cis_set_boot_pass: false
+
+# DECISION: Skip GDM controls — headless servers have no GUI.
+ubtu24cis_rule_1_7_1: false
+ubtu24cis_rule_1_7_2: false
+ubtu24cis_rule_1_7_3: false
+ubtu24cis_rule_1_7_4: false
+ubtu24cis_rule_1_7_5: false
+ubtu24cis_rule_1_7_6: false
+ubtu24cis_rule_1_7_7: false
+
+# Warning banner for SSH login
+ubtu24cis_warning_banner: |
+  Authorized users only. All activity may be monitored and reported.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 2: Services & Time
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Use systemd-timesyncd (Ubuntu default, no extra package).
+ubtu24cis_time_sync_tool: "systemd-timesyncd"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 3: Network
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Do NOT disable IPv6 — Hetzner Cloud networking depends on it.
+# Why: Hetzner cloud-init generates netplan with IPv6 gateway (fe80::1) and
+#      IPv6 DNS servers. Disabling IPv6 at kernel level (ipv6.disable=1 in
+#      GRUB) causes systemd-networkd to fail configuring eth0 entirely,
+#      leaving the server unreachable.
+# NOTE: The actual override is in vars/main.yml (ubtu24cis_ipv6_required: true)
+#       to ensure it takes precedence over the upstream role's defaults.
+ubtu24cis_ipv6_required: true
+ubtu24cis_rule_3_1_1: false
+
+# DECISION: Do not install NetworkManager — Hetzner Cloud images use netplan/systemd-networkd.
+# Installing NM can conflict with Hetzner's network autoconfiguration.
+ubtu24cis_install_network_manager: false
+ubtu24cis_rule_3_1_2: false
+
+# Bluetooth not present on headless VPS
+ubtu24cis_bluetooth_service: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 4: Firewall — DISABLED (compensating control)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# COMPROMISE: CIS Section 4 (host-based firewall) disabled entirely.
+# Why: Hetzner Cloud Firewall provides equivalent L3/L4 filtering at the
+#      hypervisor level — traffic is filtered BEFORE it reaches the VM.
+#      Host-level UFW on CIS-hardened images causes multiple conflicts:
+#      - nftables backend (`iptables-nft`) and UFW rule ordering issues
+#      - UFW conflicts with Kubernetes CNI iptables rules (Cilium, Canal)
+#      - DEFAULT_OUTPUT_POLICY="DROP" blocks DNS, image pulls, NTP
+#      - CIS role's `flush ruleset` in /etc/nftables.conf destroys UFW rules
+#      Hetzner Cloud Firewall is documented as a compensating control per
+#      CIS Benchmark guidance on cloud-native environments.
+# See: docs/ARCHITECTURE.md — Security Model
+# NOTE: The actual override is in vars/main.yml — do not set ubtu24cis_section4 here.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 5: SSH & Access
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Allow root SSH login — required for Packer builds and cloud-init.
+# Why: Hetzner Cloud provisions servers with root-only SSH access.
+#      Terraform provisioners (readiness checks, kubeconfig fetch) also SSH as root.
+#      Creating a non-root user is planned but not yet implemented.
+# TODO: Create a dedicated provisioner user, restrict root SSH to key-only.
+ubtu24cis_sshd_allow_users: "root"
+
+# SSH hardening defaults (CIS-compliant values)
+ubtu24cis_sshd_log_level: "INFO"
+ubtu24cis_sshd_max_auth_tries: 4
+ubtu24cis_sshd_max_sessions: 10
+ubtu24cis_sshd_login_grace_time: 60
+ubtu24cis_sshd_client_alive_interval: 300
+ubtu24cis_sshd_client_alive_count_max: 3
+
+# DECISION: Exclude root from NOPASSWD sudo restriction.
+# Why: Cloud-init and Packer provisioners run as root; removing NOPASSWD
+#      for root would break automated provisioning flows.
+ubtu24cis_sudoers_exclude_nopasswd_list:
+  - root
+
+# WORKAROUND: Disable CIS rule 5.4.2.5 (root PATH integrity check).
+# Why: The upstream UBUNTU24-CIS task accesses item.stat.pw_name on path entries
+#      that may not have that attribute (e.g. non-existent /snap/bin). This causes
+#      'dict has no attribute pw_name' on ansible-core 2.20. The root PATH on Hetzner
+#      Cloud images is standard and does not need remediation.
+# See: https://github.com/ansible-lockdown/UBUNTU24-CIS
+# TODO: Remove when upstream fixes the conditional in cis_5.4.2.x.yml:163.
+ubtu24cis_rule_5_4_2_5: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 6: Logging
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Use journald (Ubuntu 24.04 default)
+ubtu24cis_syslog_service: "journald"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 7: File Permissions
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Exclude Kubernetes runtime paths from unowned file checks.
+# Why: containerd, kubelet, and CSI drivers create ephemeral files with
+#      non-standard ownership inside /var/lib/kubelet and /run/containerd.
+ubtu24cis_exclude_unowned_search_path: >-
+  \( ! -path "/run/user/*"
+  -a ! -path "/proc/*"
+  -a ! -path "*/containerd/*"
+  -a ! -path "*/kubelet/pods/*"
+  -a ! -path "*/kubelet/plugins/*"
+  -a ! -path "/sys/fs/cgroup/memory/*"
+  -a ! -path "/var/*/private/*"
+  -a ! -path "/snap/*"
+  -a ! -path "/var/lib/rancher/*"
+  -a ! -path "/run/k3s/*"
+  \)
+
+# Do not strip SUID bits — some K8s components may need them
+ubtu24cis_suid_sgid_adjust: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Kubernetes port rules — NOT USED (Section 4 disabled)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# NOTE: Hetzner Cloud Firewall (modules/infrastructure/firewall.tf) handles
+# all port filtering. The rules below are kept as documentation of required
+# ports for operators who configure the Hetzner Cloud Firewall.
+#
+# Required ports:
+#   TCP 22       — SSH (Terraform provisioners, operator access)
+#   TCP 6443     — Kubernetes API server
+#   TCP 9345     — RKE2 node registration
+#   TCP 80/443   — HTTP/HTTPS ingress
+#   TCP 2379:2380 — etcd peer communication
+#   TCP 10250    — kubelet API
+#   UDP 8472     — VXLAN overlay (Canal/Flannel CNI)
+#   UDP 51820    — WireGuard (Calico option)
+#   TCP/UDP 30000:32767 — NodePort range
+#   10.0.0.0/16  — Private network (inter-node, all ports)

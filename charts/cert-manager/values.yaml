@@ -1,0 +1,23 @@
+# cert-manager Helm values
+# Chart: jetstack/cert-manager
+# Ref: https://cert-manager.io/docs/installation/helm/
+#
+# DECISION: Install CRDs via Helm chart (not separate kubectl apply).
+# Why: Single lifecycle — chart upgrade updates CRDs automatically.
+#      crds.keep=true ensures CRDs survive helm uninstall.
+
+crds:
+  enabled: true
+  keep: true
+
+startupapicheck:
+  timeout: "5m"
+
+# NOTE: Resource requests/limits follow container best practices (gate #145).
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "250m"
+    memory: "256Mi"

@@ -1,0 +1,59 @@
+# iSCSI Installer DaemonSet — Longhorn prerequisite
+#
+# DECISION: Install open-iscsi via Kubernetes DaemonSet.
+# Why: Keeps cloud-init scripts minimal and Longhorn-agnostic.
+#      Uses Longhorn's official approach: nsenter into host mount namespace.
+# See: https://longhorn.io/docs/latest/deploy/install/#installing-open-iscsi
+#
+# Apply BEFORE installing Longhorn:
+#   kubectl apply -f longhorn/manifests/iscsi-installer.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: longhorn-iscsi-installation
+  namespace: longhorn-system
+  labels:
+    app: longhorn-iscsi-installation
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-iscsi-installation
+  template:
+    metadata:
+      labels:
+        app: longhorn-iscsi-installation
+    spec:
+      hostNetwork: true
+      hostPID: true
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      initContainers:
+        - name: iscsi-installation
+          command:
+            - nsenter
+            - --mount=/proc/1/ns/mnt
+            - --
+            - bash
+            - -c
+            - |
+              if ! systemctl is-active --quiet iscsid 2>/dev/null; then
+                apt-get update -q -y && apt-get install -q -y open-iscsi
+                systemctl enable iscsid
+                systemctl start iscsid
+              fi
+              echo "iSCSI is ready"
+          # NOTE: Version registered in charts/versions.yaml (key: alpine_iscsi_init).
+          image: alpine:3.17
+          securityContext:
+            privileged: true
+      containers:
+        - name: sleep
+          command:
+            - /bin/sh
+            - -c
+            - sleep infinity
+          # WORKAROUND: Do not use the pause image here.
+          # Why: registry.k8s.io/pause does not contain /bin/sh, so the
+          #      DaemonSet enters CrashLoopBackOff after initContainer finishes.
+          # NOTE: Version registered in charts/versions.yaml (key: alpine_iscsi_sleep).
+          image: alpine:3.19

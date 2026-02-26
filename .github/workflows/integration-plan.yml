@@ -38,6 +38,12 @@ jobs:
           # written to GITHUB_OUTPUT file on disk (could persist sensitive data).
           tofu_wrapper: false
 
+      - name: Cache providers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: examples/minimal/.terraform/providers
+          key: ${{ runner.os }}-tofu-${{ hashFiles('.terraform.lock.hcl') }}
+
       - name: Init
         run: tofu init -backend=false -input=false
 
@@ -48,7 +54,16 @@ jobs:
           # SECURITY: Force TF_LOG empty to prevent debug-level output from
           # leaking sensitive resource attributes into workflow logs.
           TF_LOG: ""
-        run: tofu plan -input=false -no-color
+        run: tofu plan -input=false -no-color 2>&1 | tee plan_output.txt
+
+      - name: Post plan summary
+        if: always()
+        working-directory: examples/minimal
+        run: |
+          echo '### Integration: plan (examples/minimal)' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -30 plan_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup (always)
         if: always()

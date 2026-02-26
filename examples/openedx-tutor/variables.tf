@@ -89,17 +89,6 @@ variable "route53_record_name" {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TLS / Let's Encrypt
-# ──────────────────────────────────────────────────────────────────────────────
-
-variable "letsencrypt_email" {
-  description = "ACME account email for Let's Encrypt certificate expiry warnings. Leave empty to skip cert-manager ClusterIssuer registration."
-  nullable    = false
-  type        = string
-  default     = ""
-}
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Backup (etcd snapshots + Longhorn volumes → Hetzner Object Storage)
 # ──────────────────────────────────────────────────────────────────────────────
 

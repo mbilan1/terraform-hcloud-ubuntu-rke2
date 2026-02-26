@@ -12,11 +12,10 @@ route53_record_name = "openedx"           # → openedx.example.com
 
 # NOTE: Keep these aligned to avoid confusing DNS/TLS behavior:
 # domain == "${route53_record_name}.${route53_zone_name}"
-domain = "openedx.example.com"
+cluster_domain = "openedx.example.com"
 
 # ── Optional ──────────────────────────────────────────────────
-rke2_cluster_name      = "openedx"
-letsencrypt_email = "admin@example.com"
+rke2_cluster_name = "openedx"
 
 # ── Backup (Hetzner Object Storage) ──────────────────────────
 # enable_backups       = true

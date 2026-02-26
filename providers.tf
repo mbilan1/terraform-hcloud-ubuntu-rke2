@@ -1,79 +1,80 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Provider declarations — root-level configuration passed to child modules
 #
+# NOTE: Provider version constraints are listed in the VERSION REGISTRY
+#       table in versions.tf. They MUST remain as string literals here
+#       (OpenTofu limitation — required_providers does not support variables).
+#       When updating a constraint, also update the table in versions.tf.
+#
 # DECISION: All providers configured exclusively in the root module.
-# Why: OpenTofu/Terraform best practice — child modules (modules/infrastructure,
-#      modules/addons) declare required_providers for version constraints only,
-#      but never contain provider {} blocks. The root module owns configuration.
+# Why: OpenTofu/Terraform best practice — child modules (modules/infrastructure)
+#      declare required_providers for version constraints only, but never
+#      contain provider {} blocks. The root module owns configuration.
 # NOTE: This module is NOT a root deployment. No backend is configured here.
 #      Deployments live in examples/ or external repositories.
+#
+# DECISION: L4 providers (kubernetes, helm, kubectl, http) removed.
+# Why: L4 (addon Helm charts, K8s resources) is managed outside Terraform
+#      via Helmfile/ArgoCD/Flux. Terraform owns only L3 (infrastructure).
+#      All addons — including HCCM — deploy via Helmfile after bootstrap.
+# See: docs/ARCHITECTURE.md — Layer Separation
 # ──────────────────────────────────────────────────────────────────────────────
 
 terraform {
-  required_version = ">= 1.5.0"
+  # DECISION: Bump to >= 1.7.0 for `removed {}` block support.
+  # Why: Addon resources (helm_release, kubernetes_*, kubectl_manifest) were
+  #      moved to external management (Helmfile/ArgoCD). `removed {}` blocks
+  #      tell OpenTofu to drop them from state without destroying the live
+  #      K8s objects. Requires OpenTofu >= 1.7.0.
+  # See: https://opentofu.org/docs/language/resources/syntax/#removing-resources
+  required_version = ">= 1.7.0"
 
   required_providers {
     # ── Hetzner Cloud platform ──────────────────────────────────────────────
+    # NOTE: Exact version pin. See versions.tf for the version registry.
     hcloud = {
       source  = "hetznercloud/hcloud"
-      version = ">= 1.44.0, < 2.0.0"
+      version = "= 1.60.1"
     }
 
     # ── AWS (Route53 DNS only) ──────────────────────────────────────────────
-    # NOTE: Upper bound widened from < 6.0.0 to < 7.0.0 to accommodate
-    # terraform-aws-modules/route53 which requires >= 6.3.0 in v5+.
+    # NOTE: Exact version pin. See versions.tf for the version registry.
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0.0, < 7.0.0"
-    }
-
-    # ── Kubernetes resource management ──────────────────────────────────────
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.23.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = ">= 2.11.0"
-    }
-    # COMPROMISE: Using gavinbunney/kubectl instead of hashicorp/kubernetes for raw manifests
-    # Why: kubernetes provider doesn't support applying arbitrary YAML manifests.
-    #      alekc/kubectl is a maintained fork with more features (v2.x), but migration
-    #      is a breaking change requiring provider source swap + state surgery.
-    # See: docs/ARCHITECTURE.md — Provider Constraints
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.19.0, < 2.0.0"
+      version = "= 6.33.0"
     }
 
     # ── Server bootstrap and provisioning ───────────────────────────────────
+    # NOTE: Exact version pins. See versions.tf for the version registry.
     cloudinit = {
       source  = "hashicorp/cloudinit"
-      version = ">= 2.3.0, < 3.0.0"
+      version = "= 2.3.7"
     }
-    remote = {
-      source  = "tenstad/remote"
-      version = ">= 0.2.0, < 1.0.0"
+    # DECISION: tenstad/remote provider removed, replaced by hashicorp/external.
+    # Why: Kubeconfig retrieval now uses data "external" + bash script
+    #      (scripts/fetch_kubeconfig.sh). Zero third-party providers needed.
+    # See: modules/infrastructure/data.tf, modules/infrastructure/scripts/fetch_kubeconfig.sh
+
+    # ── Kubeconfig retrieval ────────────────────────────────────────────────
+    # NOTE: Exact version pin. See versions.tf for the version registry.
+    external = {
+      source  = "hashicorp/external"
+      version = "= 2.3.5"
     }
 
     # ── Cryptography, randomness, local filesystem ──────────────────────────
+    # NOTE: Exact version pins. See versions.tf for the version registry.
     tls = {
       source  = "hashicorp/tls"
-      version = ">= 4.0.0, < 5.0.0"
+      version = "= 4.2.1"
     }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.5.0, < 4.0.0"
+      version = "= 3.8.1"
     }
     local = {
       source  = "hashicorp/local"
-      version = ">= 2.4.0, < 3.0.0"
-    }
-
-    # ── HTTP data fetching (System Upgrade Controller manifests) ────────────
-    http = {
-      source  = "hashicorp/http"
-      version = ">= 3.4.0, < 4.0.0"
+      version = "= 2.7.0"
     }
   }
 }
@@ -88,6 +89,9 @@ locals {
   aws_access_key_effective = (!local.aws_dns_is_enabled && var.aws_access_key == "") ? "unused" : var.aws_access_key
   aws_secret_key_effective = (!local.aws_dns_is_enabled && var.aws_secret_key == "") ? "unused" : var.aws_secret_key
 
+  # DECISION: Keep provider locals strictly behavior-driving.
+  # Why: Removing unused metadata placeholders avoids dead config that can
+  #      confuse reviews and static analysis without adding runtime value.
   aws_skip_validation = !local.aws_dns_is_enabled
 }
 
@@ -111,39 +115,4 @@ provider "aws" {
   skip_credentials_validation = local.aws_skip_validation
   skip_requesting_account_id  = local.aws_skip_validation
   skip_metadata_api_check     = local.aws_skip_validation
-}
-
-# ── Kubernetes ecosystem (credentials from infrastructure module output) ─────
-#
-# DECISION: All three K8s-facing providers consume kubeconfig credentials
-# produced by module.infrastructure after cluster bootstrap completes.
-# Why: Ensures addons deploy to the correct cluster with valid mTLS. The
-#      infrastructure module outputs are empty strings during initial plan
-#      (before any apply) which providers handle gracefully.
-
-provider "kubernetes" {
-  host = module.infrastructure.cluster_host
-
-  cluster_ca_certificate = module.infrastructure.cluster_ca
-  client_certificate     = module.infrastructure.client_cert
-  client_key             = module.infrastructure.client_key
-}
-
-provider "helm" {
-  kubernetes = {
-    host = module.infrastructure.cluster_host
-
-    cluster_ca_certificate = module.infrastructure.cluster_ca
-    client_certificate     = module.infrastructure.client_cert
-    client_key             = module.infrastructure.client_key
-  }
-}
-
-provider "kubectl" {
-  host             = module.infrastructure.cluster_host
-  load_config_file = false
-
-  cluster_ca_certificate = module.infrastructure.cluster_ca
-  client_certificate     = module.infrastructure.client_cert
-  client_key             = module.infrastructure.client_key
 }

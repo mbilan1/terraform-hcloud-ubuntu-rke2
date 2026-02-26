@@ -1,0 +1,23 @@
+---
+# Ansible Galaxy requirements for Packer image builds.
+#
+# DECISION: Pin CIS role to a release tag for reproducibility.
+# Why: Unpinned roles pull from HEAD, which may introduce breaking changes
+#      or new controls that haven't been tested with the RKE2 stack.
+# See: https://github.com/ansible-lockdown/UBUNTU24-CIS/releases
+
+roles:
+  # CIS Benchmark v1.0.0 hardening for Ubuntu 24.04 LTS.
+  # Used only when enable_cis_hardening=true in the Packer build.
+  - name: ansible-lockdown.UBUNTU24-CIS
+    src: https://github.com/ansible-lockdown/UBUNTU24-CIS.git
+    scm: git
+    version: "1.0.4"
+
+collections:
+  # Required by rke2-base role (community.general.modprobe)
+  - name: community.general
+    version: ">=9.0.0"
+  # Required by rke2-base role (ansible.posix.sysctl)
+  - name: ansible.posix
+    version: ">=1.5.0"

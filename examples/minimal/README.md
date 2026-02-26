@@ -17,7 +17,7 @@ tofu apply
 | Variable | Description |
 |----------|-------------|
 | `hcloud_token` | Hetzner Cloud API token |
-| `domain` | Cluster domain (default: `test.example.com`) |
+| `cluster_domain` | Cluster domain (default: `test.example.com`) |
 
 ## What Gets Created
 
@@ -26,7 +26,8 @@ tofu apply
 - Private network + subnet
 - Firewall
 - SSH key pair
-- HCCM, CSI driver, cert-manager (all defaults)
+
+L4 addons (HCCM, CSI, cert-manager) are deployed separately via Helmfile — see `charts/README.md`.
 
 ## Cost
 

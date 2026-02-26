@@ -1,0 +1,116 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# OpenBao Helm values — EXPERIMENTAL secrets management
+#
+# Chart: openbao/openbao
+# Ref: https://github.com/openbao/openbao-helm
+# ArtifactHub: https://artifacthub.io/packages/helm/openbao/openbao
+#
+# DECISION: Dev mode for bootstrap, operator reconfigures for production.
+# Why: Dev mode provides a working OpenBao with a pre-set root token and
+#      in-memory storage — perfect for the bootstrap phase where the only
+#      goal is to securely hand off the kubeconfig. The operator can later
+#      reconfigure to standalone/HA with Raft storage if needed.
+#
+# SECURITY WARNING:
+#   Dev mode is NOT production-grade:
+#     - Data is stored in memory (lost on pod restart)
+#     - TLS is disabled internally (relies on ingress TLS termination)
+#     - Root token has unlimited access
+#   This is intentional for the bootstrap use case. After retrieving the
+#   kubeconfig and setting up permanent auth, either:
+#     a) Tear down OpenBao: `helmfile destroy -l name=openbao`
+#     b) Reconfigure for production: switch to standalone/HA with Raft
+#
+# OPERATOR SETUP:
+#   1. Replace OPENBAO_BOOTSTRAP_TOKEN with: tofu output -raw openbao_bootstrap_token
+#   2. Replace CLUSTER_DOMAIN with your cluster domain
+#   3. Run: helmfile -l name=openbao sync
+#   4. Access: https://vault.CLUSTER_DOMAIN
+#   5. Push kubeconfig: see charts/openbao/README.md
+#   6. REVOKE the bootstrap token after configuring permanent auth
+# ──────────────────────────────────────────────────────────────────────────────
+
+global:
+  # DECISION: TLS disabled at OpenBao level — handled by ingress TLS termination.
+  # Why: cert-manager + ingress-nginx (or Harmony) already provide TLS.
+  #      Double TLS adds complexity without security benefit in-cluster.
+  tlsDisable: true
+
+server:
+  # DECISION: Dev mode for bootstrap simplicity.
+  # Why: Eliminates the init/unseal ceremony. Operator gets immediate access
+  #      with a pre-shared token from Terraform output.
+  # TODO: Add standalone/HA mode configuration as an alternative when
+  #       the module matures beyond experimental status.
+  dev:
+    enabled: true
+    # SECURITY: Replace with the actual token from Terraform output.
+    # Run: tofu output -raw openbao_bootstrap_token
+    devRootToken: "OPENBAO_BOOTSTRAP_TOKEN"
+
+  # NOTE: Dev mode ignores dataStorage (in-memory), but we configure it
+  # for when the operator switches to standalone/HA mode.
+  dataStorage:
+    enabled: true
+    size: 1Gi
+    # DECISION: Use Longhorn as storage class for Raft PVC.
+    # Why: Longhorn replicates data across workers (HA), provides snapshots,
+    #      and S3 backup. Already deployed in the stack.
+    storageClass: longhorn
+
+  # Resource limits for a lightweight bootstrap instance
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+  # DECISION: Ingress for external operator access.
+  # Why: The operator needs to reach OpenBao from outside the cluster
+  #      to retrieve the kubeconfig. This is the whole point — access
+  #      OpenBao without needing kubeconfig first.
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - host: vault.CLUSTER_DOMAIN
+    tls:
+      - secretName: openbao-tls
+        hosts:
+          - vault.CLUSTER_DOMAIN
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
+
+  # Single replica for ephemeral/bootstrap use
+  # NOTE: Increase to 3 and switch to HA Raft mode for production.
+  standalone:
+    enabled: "-"
+
+  # Readiness probe on the health endpoint
+  readinessProbe:
+    enabled: true
+    port: 8200
+
+# DECISION: Disable injector for bootstrap mode.
+# Why: Agent Injector is useful for steady-state secrets management
+#      (injecting secrets into application pods). For bootstrap-only
+#      use (kubeconfig handoff), it's unnecessary overhead.
+# TODO: Enable and document when OpenBao is used as a permanent
+#       secrets manager (post-experimental).
+injector:
+  enabled: false
+
+# DECISION: Disable CSI provider for bootstrap mode.
+# Why: Same rationale as injector — not needed for kubeconfig handoff.
+csi:
+  enabled: false
+
+# DECISION: Disable UI for security.
+# Why: CLI access via `bao` command is sufficient for bootstrap.
+#      UI exposes an additional attack surface.
+# NOTE: Operators can enable this by setting ui.enabled=true
+#       in their values override.
+ui:
+  enabled: false

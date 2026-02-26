@@ -1,0 +1,143 @@
+---
+# Tasks for cis-hardening wrapper role
+#
+# DECISION: Run CIS hardening role, then disable host-level firewall.
+# Why: Hetzner Cloud Firewall handles all L3/L4 filtering at the hypervisor.
+#      Host-level UFW/nftables on CIS-hardened Ubuntu 24.04 conflicts with
+#      Kubernetes CNI iptables rules and causes SSH unreachability.
+# See: defaults/main.yml for the full rationale (Section 4 disabled).
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 1: Run upstream CIS hardening
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: Apply CIS Level 1 hardening (UBUNTU24-CIS)
+  ansible.builtin.include_role:
+    name: ansible-lockdown.UBUNTU24-CIS
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 2: Post-CIS network safety — undo settings that break Hetzner Cloud
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: Remove ipv6.disable=1 from GRUB (breaks Hetzner Cloud networking)
+  # WORKAROUND: CIS rule 3.1.1 adds ipv6.disable=1 to GRUB_CMDLINE_LINUX.
+  # Why: Despite setting ubtu24cis_ipv6_required=true and ubtu24cis_rule_3_1_1=false,
+  #      the upstream CIS role may still add this parameter due to variable precedence
+  #      quirks with include_role. This belt-and-suspenders task ensures ipv6.disable=1
+  #      is NEVER present in the final snapshot.
+  #      Hetzner cloud-init generates netplan with IPv6 route (via: fe80::1).
+  #      With ipv6.disable=1, systemd-networkd fails eth0 entirely:
+  #        "Could not set route: Operation not supported" → "eth0: Failed"
+  #      Server becomes completely unreachable (no IP, no routes).
+  # See: docs/ARCHITECTURE.md — Cloud-Init Architecture
+  # TODO: Remove when upstream CIS role respects ubtu24cis_ipv6_required reliably.
+  ansible.builtin.replace:
+    path: /etc/default/grub
+    regexp: '\s*ipv6\.disable=1'
+    replace: ''
+  register: grub_ipv6_fix
+
+- name: Update GRUB after removing ipv6.disable
+  ansible.builtin.command: update-grub
+  when: grub_ipv6_fix.changed
+  changed_when: true
+
+- name: Ensure net.ipv4.ip_forward=1 for Kubernetes networking
+  # WORKAROUND: CIS rule 3.3.1 sets net.ipv4.ip_forward=0 in /etc/sysctl.conf.
+  # Why: Kubernetes nodes MUST forward packets between pods, services, and
+  #      external networks. RKE2 sets ip_forward=1 at runtime via
+  #      /etc/sysctl.d/99-rke2.conf, but sysctl processing order varies
+  #      between systemd-sysctl and procps-sysctl. This drop-in at priority 99
+  #      ensures ip_forward=1 persists after CIS hardening.
+  # TODO: Remove if CIS role adds a ubtu24cis_is_router option that handles this.
+  ansible.builtin.copy:
+    content: |
+      # WORKAROUND: Override CIS rule 3.3.1 (net.ipv4.ip_forward=0)
+      # Why: Kubernetes nodes must forward packets for pod networking.
+      # Set by cis-hardening role at Packer build time.
+      net.ipv4.ip_forward = 1
+    dest: /etc/sysctl.d/99-kubernetes-forwarding.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 2b: AppArmor — relax container-runtime profiles for Kubernetes
+#
+# DECISION: Keep AppArmor enforce mode globally, but switch container-runtime
+# profiles (busybox, crun, buildah, ch-run, ch-checkns, runc) to complain mode.
+# Why: CIS rule 1.3.1.4 puts ALL AppArmor profiles in enforce mode. This blocks
+#      Kubernetes containers whose init-containers use busybox (e.g. Cilium).
+#      The containerd CRI runtime applies its own AppArmor profile
+#      (cri-containerd.apparmor.d) — which stays in enforce. System profiles
+#      (sshd, cron, man, snap) also stay in enforce. Only container-tool profiles
+#      that collide with Kubernetes pod execution are relaxed to complain mode.
+# See: audit log shows: apparmor="DENIED" profile="busybox" comm="cp"
+#      name="/usr/lib64/libcrypt.so.1.1.0" — blocking Cilium CNI install.
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: Set container-runtime AppArmor profiles to complain mode
+  # WORKAROUND: CIS enforce mode on busybox/crun/buildah profiles blocks
+  # Kubernetes init-containers. These profiles are not needed on K8s nodes
+  # because containerd applies cri-containerd.apparmor.d to all containers.
+  # TODO: Remove if upstream CIS role adds a Kubernetes-aware profile skip list.
+  ansible.builtin.command: "aa-complain {{ item }}"
+  loop:
+    - busybox
+    - crun
+    - buildah
+    - ch-checkns
+    - ch-run
+    - runc
+  ignore_errors: true
+  changed_when: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 4: Post-CIS firewall cleanup
+#
+# COMPROMISE: CIS Section 4 is disabled (see defaults/main.yml). Hetzner Cloud
+# Firewall provides perimeter filtering at the hypervisor level.
+# We disable UFW and nftables to prevent stale rules from blocking traffic.
+# See: docs/ARCHITECTURE.md — Security Model
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: Disable and stop UFW (Hetzner Cloud Firewall is compensating control)
+  # COMPROMISE: Host firewall disabled — Hetzner Cloud Firewall handles L3/L4.
+  # Why: UFW on CIS-hardened Ubuntu 24.04 uses iptables-nft backend which
+  #      conflicts with nftables.conf `flush ruleset`, Kubernetes CNI rules,
+  #      and causes SSH unreachability. The cloud firewall filters traffic
+  #      before it reaches the VM — a strictly stronger security boundary.
+  community.general.ufw:
+    state: disabled
+  ignore_errors: true
+
+- name: Ensure nftables does not flush firewall rules at boot
+  # WORKAROUND: Default /etc/nftables.conf starts with `flush ruleset` which
+  # destroys any iptables-nft rules (including those from Kubernetes CNI).
+  # Why: Even with UFW disabled, nftables.service may still be enabled and
+  #      its `flush ruleset` can interfere with CNI-managed iptables rules.
+  # TODO: Remove if upstream CIS role stops enabling nftables.service.
+  ansible.builtin.systemd:
+    name: nftables
+    state: stopped
+    enabled: false
+  ignore_errors: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 5: Write hardening metadata
+# ──────────────────────────────────────────────────────────────────────────────
+
+- name: Record CIS hardening metadata
+  # DECISION: Write a marker file so operators can verify hardening at runtime.
+  # Why: After cloud-init boot, operators can check whether the image was CIS-hardened
+  #      without inspecting the Packer build logs or snapshot labels.
+  ansible.builtin.copy:
+    content: |
+      # CIS hardening applied at Packer build time
+      benchmark: UBUNTU24-CIS
+      benchmark_version: v1.0.0
+      role_version: 1.0.4
+      level: 1
+      applied_at: {{ ansible_date_time.iso8601 }}
+    dest: /etc/cis-hardening-applied
+    mode: "0444"

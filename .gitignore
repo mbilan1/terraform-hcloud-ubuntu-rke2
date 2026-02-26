@@ -1,37 +1,37 @@
-# Local .terraform directories
+# ─── OpenTofu / Terraform runtime artifacts ───
+# Provider plugins and cached modules (re-created by `tofu init`)
 **/.terraform*
+# Preserve terraform-docs config at root
 !.terraform-docs.yml
-main.auto.tfvars
-# .tfstate files
+
+# ─── State and plan files (contain secrets — NEVER commit) ───
 *.tfstate
 *.tfstate.*
+*.tfplan
+tfplan
 
-# Crash log files
-crash.log
-kubeconfig
-rancher-host-key
-# Ignore any .tfvars files that are generated automatically for each Terraform run. Most
-# .tfvars files are managed as part of configuration and so should be included in
-# version control.
-#
-# example.tfvars
+# ─── Variable overrides (may contain secrets or local paths) ───
+main.auto.tfvars
+*.auto.tfvars
 
-# Ignore override files as they are usually used to override resources locally and so
-# are not checked in
+# Ignore override files (used for local resource overrides, not checked in)
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Include override files you do wish to add to version control using negated pattern
-#
-# !example_override.tf
+# ─── OpenTofu crash logs ───
+crash.log
+crash.*.log
 
-# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
-# example: *tfplan*
+# ─── Generated artifacts (written by module outputs / provisioners) ───
+kubeconfig
 kubeconfig.yaml
+rancher-host-key
 
+# ─── IDE and editor settings ───
 .vscode/*
+.idea/
 
-# Python virtual environment (used for compliance tooling: copydetect, etc.)
+# ─── Python virtual environment (compliance tooling: copydetect, reuse, etc.) ───
 .venv/

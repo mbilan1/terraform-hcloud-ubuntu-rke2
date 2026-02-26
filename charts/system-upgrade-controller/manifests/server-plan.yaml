@@ -1,0 +1,38 @@
+# SUC Server Upgrade Plan — control-plane nodes
+#
+# DECISION: Separate server and agent plans with sequential upgrades.
+# Why: Control-plane must upgrade before workers (API compatibility).
+#      Concurrency=1 ensures one node upgrades at a time (etcd quorum safety).
+#
+# NOTE: Replace KUBERNETES_VERSION with target version (e.g., "v1.34.3+rke2r1")
+# or use channel-based upgrades (recommended for automatic patching).
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: server-plan
+  namespace: system-upgrade
+spec:
+  concurrency: 1
+  cordon: true
+  drain:
+    force: true
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/master
+        operator: In
+        values:
+          - "true"
+  serviceAccountName: system-upgrade
+  prepare:
+    # DECISION: Create etcd snapshot before each server upgrade.
+    # Why: Provides a rollback point in case the upgrade fails.
+    image: rancher/rke2-upgrade
+    command:
+      - /bin/sh
+      - -c
+      - "rke2 etcd-snapshot save --name pre-upgrade-$(date +%s)"
+  upgrade:
+    image: rancher/rke2-upgrade
+  channel: https://update.rke2.io/v1-release/channels/stable
+  # Alternatively, pin a specific version:
+  # version: "v1.34.3+rke2r1"

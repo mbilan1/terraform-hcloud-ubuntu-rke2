@@ -21,7 +21,7 @@ data "cloudinit_config" "initial_control_plane" {
   gzip          = false
   base64_encode = false
 
-  # Part 1: Write RKE2 config.yaml via cloud-init write_files directive.
+  # Part 1: Write RKE2 config via cloud-init.
   # DECISION: Static config is written declaratively, not via shell heredoc.
   # Why: Cleaner separation of concerns. Config.yaml content is determined at
   #      plan time; only NODE_IP requires runtime detection.
@@ -68,7 +68,8 @@ data "cloudinit_config" "initial_control_plane" {
 
   # Part 2: Bootstrap shell script — minimal runtime logic only.
   # DECISION: Shell script only handles what requires runtime data.
-  # Why: IP detection uses Hetzner metadata API (available only at boot time).
+  # Why: IP detection prefers Hetzner metadata and falls back to kernel state
+  #      during early-boot metadata/network races.
   #      Everything else (config content, install version) is already resolved.
   part {
     content_type = "text/x-shellscript"

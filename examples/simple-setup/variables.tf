@@ -8,9 +8,3 @@ variable "cluster_domain" {
   type        = string
   default     = "example.com"
 }
-
-variable "letsencrypt_issuer" {
-  description = "Email address for Let's Encrypt certificate notifications."
-  type        = string
-  default     = "admin@example.com"
-}

@@ -1,0 +1,47 @@
+---
+# CRITICAL overrides for ansible-lockdown/UBUNTU24-CIS
+#
+# DECISION: Use vars/main.yml (not defaults/main.yml) for settings that MUST
+# take precedence over the upstream role's defaults/main.yml.
+# Why: When cis-hardening includes the upstream role via include_role, Ansible
+#      loads the included role's defaults AFTER the calling role's defaults.
+#      Both are at "role defaults" precedence, and the last load wins — meaning
+#      the upstream role's defaults override ours. Moving critical settings to
+#      vars/main.yml (precedence level 16 vs. 2) guarantees our values stick.
+# See: https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_variables.html#understanding-variable-precedence
+
+# ──────────────────────────────────────────────────────────────────────────────
+# IPv6: DO NOT DISABLE — breaks Hetzner Cloud networking
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: IPv6 must remain enabled on Hetzner Cloud.
+# Why: Hetzner cloud-init generates netplan config with IPv6 default route
+#      (via: fe80::1) and IPv6 DNS servers (2a01:4ff:ff00::add:1/2).
+#      When ipv6.disable=1 is set in GRUB, systemd-networkd cannot set the
+#      IPv6 route, and the ENTIRE eth0 configuration fails:
+#        systemd-networkd: eth0: Could not set route: Operation not supported
+#        systemd-networkd: eth0: Failed
+#      This leaves the server completely unreachable (no IP, no routes).
+# See: docs/ARCHITECTURE.md — Cloud-Init Architecture
+ubtu24cis_ipv6_required: true
+ubtu24cis_rule_3_1_1: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Section 4: Host-based firewall — DISABLED (compensating control)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# COMPROMISE: Hetzner Cloud Firewall replaces host-based UFW/nftables.
+# Why: See defaults/main.yml for the full rationale. This var MUST be in
+#      vars/main.yml to prevent the upstream role's default (true) from
+#      re-enabling Section 4 tasks.
+ubtu24cis_section4: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NetworkManager: DO NOT INSTALL — conflicts with Hetzner netplan
+# ──────────────────────────────────────────────────────────────────────────────
+
+# DECISION: Hetzner Cloud images use netplan + systemd-networkd.
+# Why: Installing NetworkManager can conflict with Hetzner's network
+#      autoconfiguration and take over interface management from networkd.
+ubtu24cis_install_network_manager: false
+ubtu24cis_rule_3_1_2: false

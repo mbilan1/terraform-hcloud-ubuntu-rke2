@@ -16,5 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
+      - name: Cache providers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .terraform/providers
+          key: ${{ runner.os }}-tofu-${{ hashFiles('.terraform.lock.hcl') }}
       - run: tofu init -backend=false
-      - run: tofu test -filter=tests/conditional_logic.tftest.hcl -no-color
+      - name: Run tests
+        run: |
+          tofu test -filter=tests/conditional_logic.tftest.hcl -no-color 2>&1 | tee test_output.txt
+      - name: Post test summary
+        if: always()
+        run: |
+          echo '### Unit: conditionals' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -20 test_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

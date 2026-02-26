@@ -1,0 +1,27 @@
+# RKE2 Built-in Ingress Configuration (HelmChartConfig)
+#
+# NOTE: Only use this when Harmony is DISABLED.
+# When Harmony is enabled, it deploys its own ingress-nginx (DaemonSet + hostPort)
+# and the RKE2 built-in ingress should be disabled via cloud-init config:
+#   disable:
+#     - rke2-ingress-nginx
+#
+# Apply this to configure the RKE2 built-in rke2-ingress-nginx controller:
+#   kubectl apply -f helmchartconfig.yaml
+#
+# NOTE: Replace PROXY_BODY_SIZE with desired value (e.g., "100m").
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-ingress-nginx
+  namespace: kube-system
+spec:
+  valuesContent: |
+    controller:
+      config:
+        proxy-body-size: "100m"
+        # Uncomment to enable ModSecurity WAF:
+        # enable-modsecurity: "true"
+        # enable-owasp-modsecurity-crs: "true"
+        # modsecurity-snippet: |-
+        #   SecRuleEngine On

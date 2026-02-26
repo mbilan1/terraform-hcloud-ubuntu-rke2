@@ -17,7 +17,7 @@
 # See: modules/infrastructure/firewall.tf
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ── Mock all providers (same boilerplate as other test files) ────────────────
+# ── Mock all 7 providers (same boilerplate as other test files) ─────────────
 
 mock_provider "hcloud" {
   mock_resource "hcloud_network" {
@@ -61,21 +61,14 @@ mock_provider "hcloud" {
   }
 }
 
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = { content = "" }
-  }
-}
+# NOTE: data "external" — mock not needed, provider auto-mocked.
+mock_provider "external" {}
 
 mock_provider "aws" {}
-mock_provider "kubectl" {}
-mock_provider "kubernetes" {}
-mock_provider "helm" {}
 mock_provider "cloudinit" {}
 mock_provider "random" {}
 mock_provider "tls" {}
 mock_provider "local" {}
-mock_provider "http" {}
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  UT-FW01: Canal VXLAN UDP 8472 is open on internal network                 ║
@@ -89,7 +82,6 @@ run "firewall_has_canal_vxlan_udp_8472" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
   }
 
   assert {
@@ -110,7 +102,6 @@ run "firewall_vxlan_not_open_to_internet" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
   }
 
   assert {
@@ -128,7 +119,6 @@ run "firewall_has_canal_wireguard_udp_51820_51821" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
   }
 
   assert {
@@ -146,7 +136,6 @@ run "firewall_has_essential_internal_tcp_rules" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
   }
 
   assert {

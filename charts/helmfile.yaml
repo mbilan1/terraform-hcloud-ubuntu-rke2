@@ -1,0 +1,208 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Helmfile — declarative Helm chart deployment for Kubernetes addons
+#
+# DECISION: Helmfile over plain `helm install` scripts.
+# Why: Declarative, idempotent, supports dependency ordering (needs:),
+#      environment-specific overrides, and diff before apply.
+#      Compatible with CI/CD pipelines and ArgoCD/Flux migration path.
+# See: https://helmfile.readthedocs.io/
+#
+# DECISION: Separate from Terraform — Terraform manages L3 (infrastructure),
+#      Helmfile manages L4 (Kubernetes workloads).
+# Why: Helm values change frequently (tuning, versions). Terraform apply
+#      risks touching infrastructure when only addon config changed.
+#      GitOps tools (ArgoCD/Flux) can manage these charts natively.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# NOTE: HCCM must be deployed FIRST after cluster bootstrap.
+# Why: Nodes have the `node.cloudprovider.kubernetes.io/uninitialized` taint
+#      until HCCM clears it. No other pods can schedule until HCCM runs.
+#      Helmfile runs from the operator's machine (not inside the cluster),
+#      so the taint does not block Helmfile itself.
+# See: charts/hccm/README.md
+
+# DECISION: All chart versions centralized in versions.yaml.
+# Why: Single source of truth — upgrades are a one-line diff, easy to audit.
+# See: charts/versions.yaml
+environments:
+  default:
+    values:
+      - versions.yaml
+
+repositories:
+  - name: hetzner
+    url: https://charts.hetzner.cloud
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: longhorn
+    url: https://charts.longhorn.io
+  - name: kubereboot
+    url: https://kubereboot.github.io/charts
+  - name: openedx
+    url: https://openedx.github.io/openedx-k8s-harmony
+  # DECISION: OpenBao Helm repo for secrets management (experimental).
+  # Why: Official OpenBao Helm chart — open-source Vault fork.
+  # See: https://github.com/openbao/openbao-helm
+  - name: openbao
+    url: https://openbao.github.io/openbao-helm
+
+releases:
+  # ── HCCM (Hetzner Cloud Controller Manager) ────────────────────────────
+  # DECISION: HCCM deployed via Helmfile, not cloud-init or Terraform.
+  # Why: Keeps all L4 addon management in one tool (Helmfile/GitOps).
+  #      Must be deployed first — nodes are unschedulable without it.
+  - name: hccm
+    namespace: kube-system
+    chart: hetzner/hcloud-cloud-controller-manager
+    # NOTE: Version pinned in versions.yaml (single source of truth).
+    # See: https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases
+    version: "{{ .Values.hccm }}"
+    values:
+      - hccm/values.yaml
+    hooks:
+      # Create the hcloud Secret before HCCM Helm release
+      - events: ["presync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "hccm/manifests/"
+
+  # ── cert-manager ────────────────────────────────────────────────────────
+  # DECISION: Deploy cert-manager after HCCM — nodes are unschedulable until HCCM
+  #   clears the `node.cloudprovider.kubernetes.io/uninitialized` taint.
+  # Why: Without HCCM, cert-manager pods stay Pending → Helmfile sync times out.
+  - name: cert-manager
+    namespace: cert-manager
+    createNamespace: true
+    chart: jetstack/cert-manager
+    # NOTE: Version pinned in versions.yaml (single source of truth).
+    # See: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+    version: "{{ .Values.cert_manager }}"
+    needs:
+      - hccm
+    values:
+      - cert-manager/values.yaml
+    hooks:
+      # NOTE: cert-manager CRDs must exist before ClusterIssuer can be created.
+      # The chart installs CRDs when crds.enabled=true (see values.yaml).
+      - events: ["postsync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "cert-manager/manifests/"
+
+  # ── Longhorn ────────────────────────────────────────────────────────────
+  # DECISION: Longhorn as primary storage driver (replaces Hetzner CSI).
+  # Why: Replication across workers (HA). Local NVMe IOPS (~50K vs ~10K).
+  #      VolumeSnapshot support. Native S3 backup.
+  - name: longhorn
+    namespace: longhorn-system
+    createNamespace: true
+    chart: longhorn/longhorn
+    # NOTE: Version pinned in versions.yaml (single source of truth).
+    # See: https://artifacthub.io/packages/helm/longhorn/longhorn
+    version: "{{ .Values.longhorn }}"
+    needs:
+      - cert-manager  # cert-manager CRDs needed if using cert-manager annotations
+    values:
+      - longhorn/values.yaml
+    hooks:
+      # DECISION: Apply iSCSI installer DaemonSet before Longhorn sync.
+      # Why: Longhorn requires open-iscsi on every node. The DaemonSet installs
+      #      it via nsenter into the host namespace. Without this, Longhorn pods
+      #      will fail with "iscsiadm not found" errors on nodes without open-iscsi.
+      # See: https://longhorn.io/docs/latest/deploy/install/#installing-open-iscsi
+      - events: ["presync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "longhorn/manifests/"
+
+  # ── Kured ───────────────────────────────────────────────────────────────
+  # NOTE: Only useful on HA clusters (>=3 masters). On single-master, reboot
+  # scheduling during maintenance is dangerous (etcd quorum loss).
+  - name: kured
+    namespace: kured
+    createNamespace: true
+    chart: kubereboot/kured
+    # NOTE: Version pinned in versions.yaml (single source of truth).
+    # See: https://github.com/kubereboot/charts/releases
+    version: "{{ .Values.kured }}"
+    values:
+      - kured/values.yaml
+  # ── OpenBao (EXPERIMENTAL — secrets management) ────────────────────────────
+  # DECISION: OpenBao deployed as an optional addon for kubeconfig handoff.
+  # Why: The default SSH approach stores kubeconfig in Terraform state.
+  #      OpenBao provides a secure API endpoint for credential retrieval
+  #      without requiring SSH access or sharing state files.
+  #
+  # NOTE: Uncomment this release when openbao_enabled = true.
+  #       Deploy only after Longhorn (Raft PVC) and cert-manager (TLS).
+  # See: charts/openbao/README.md for the full setup guide.
+  #
+  # - name: openbao
+  #   namespace: openbao
+  #   createNamespace: true
+  #   chart: openbao/openbao
+  #   version: "{{ .Values.openbao }}"
+  #   needs:
+  #     - cert-manager
+  #     - longhorn
+  #   values:
+  #     # Use values-dev.yaml for bootstrap mode, values.yaml for production mode
+  #     - openbao/values.yaml
+  #   hooks:
+  #     # NOTE: These hooks are for DEV MODE ONLY (kubeconfig bootstrap).
+  #     # If using production mode (values.yaml), comment out these hooks
+  #     # because OpenBao starts sealed and the job will fail.
+  #     - events: ["presync"]
+  #       showlogs: true
+  #       command: "kubectl"
+  #       args:
+  #         - "apply"
+  #         - "-f"
+  #         - "openbao/manifests/bootstrap-token-secret.yaml"
+  #     - events: ["postsync"]
+  #       showlogs: true
+  #       command: "kubectl"
+  #       args:
+  #         - "apply"
+  #         - "-f"
+  #         - "openbao/manifests/push-kubeconfig-job.yaml"
+  # ── Harmony (Open edX) ─────────────────────────────────────────────────
+  # NOTE: Optional — only deploy when running Open edX workloads.
+  # Comment out or remove this release if not using Open edX.
+  #
+  # DECISION: Harmony depends on cert-manager + longhorn.
+  # Why: Harmony workloads need TLS certificates and persistent storage.
+  - name: harmony
+    namespace: harmony
+    createNamespace: true
+    chart: openedx/harmony-chart
+    # NOTE: Version pinned in versions.yaml (single source of truth).
+    # See: https://github.com/openedx/openedx-k8s-harmony/releases
+    version: "{{ .Values.harmony }}"
+    needs:
+      - cert-manager
+      - longhorn
+    values:
+      - harmony/values.yaml
+    hooks:
+      # DECISION: Apply TLS Certificate manifest before Harmony sync.
+      # Why: Harmony's ingress-nginx references `harmony/harmony-default-tls` as
+      #      default-ssl-certificate. Without this Certificate, HTTPS serves the
+      #      self-signed "Fake Certificate" instead of a real Let's Encrypt cert.
+      # See: docs/ARCHITECTURE.md — Harmony: default TLS certificate bootstrap
+      - events: ["presync"]
+        showlogs: true
+        command: "kubectl"
+        args:
+          - "apply"
+          - "-f"
+          - "harmony/manifests/"

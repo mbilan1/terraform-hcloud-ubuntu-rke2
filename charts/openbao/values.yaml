@@ -1,0 +1,124 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# OpenBao Helm values — PRODUCTION secrets management
+#
+# Chart: openbao/openbao
+# Ref: https://github.com/openbao/openbao-helm
+# ArtifactHub: https://artifacthub.io/packages/helm/openbao/openbao
+#
+# DECISION: Production mode with HA Raft storage and Agent Injector.
+# Why: This configuration makes OpenBao the default secret manager for the
+#      Kubernetes cluster. Secrets are persisted to Longhorn volumes,
+#      replicated across nodes, and injected into application pods via
+#      the Agent Injector sidecar.
+#
+# SECURITY WARNING:
+#   - OpenBao starts SEALED. You must initialize and unseal it manually.
+#   - Store the unseal keys securely (e.g., in a password manager).
+#   - The root token generated during initialization should be revoked
+#     after setting up Kubernetes Auth and administrative policies.
+#
+# OPERATOR SETUP:
+#   1. Replace CLUSTER_DOMAIN with your cluster domain
+#   2. Run: helmfile -l name=openbao sync
+#   3. Initialize OpenBao:
+#      kubectl exec -n openbao openbao-0 -- bao operator init
+#   4. Unseal OpenBao (run 3 times with different keys):
+#      kubectl exec -n openbao openbao-0 -- bao operator unseal
+#   5. Access: https://vault.CLUSTER_DOMAIN
+# ──────────────────────────────────────────────────────────────────────────────
+
+global:
+  # DECISION: TLS disabled internally — handled by ingress TLS termination.
+  # Why: cert-manager + ingress-nginx already provide TLS at the edge.
+  tlsDisable: true
+
+server:
+  # DECISION: Disable dev mode for production.
+  dev:
+    enabled: false
+
+  # DECISION: HA mode with Raft storage.
+  # Why: Raft provides built-in HA without requiring an external database
+  #      like Consul or PostgreSQL. It replicates data across the OpenBao pods.
+  ha:
+    enabled: true
+    replicas: 3
+    
+    # DECISION: Use Raft integrated storage.
+    raft:
+      enabled: true
+      setNodeId: true
+      
+      config: |
+        ui = true
+        
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        
+        storage "raft" {
+          path = "/openbao/data"
+        }
+        
+        service_registration "kubernetes" {}
+
+  # DECISION: Persistent storage via Longhorn.
+  # Why: Longhorn replicates data across workers, providing node-level fault
+  #      tolerance for the Raft volumes.
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+
+  # Resource limits for production workloads
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+  # DECISION: Ingress for external operator access and UI.
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - host: vault.CLUSTER_DOMAIN
+    tls:
+      - secretName: openbao-tls
+        hosts:
+          - vault.CLUSTER_DOMAIN
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
+
+# DECISION: Enable Agent Injector for application secrets.
+# Why: Allows Kubernetes pods to consume OpenBao secrets natively via
+#      annotations, without needing to know the OpenBao API or tokens.
+#      The injector mutates pods to add an init container that fetches
+#      secrets and writes them to a shared memory volume.
+injector:
+  enabled: true
+  
+  # Resource limits for the injector webhook
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+# DECISION: Disable CSI provider.
+# Why: Agent Injector is generally easier to use and more flexible than CSI
+#      for most workloads. CSI can be enabled later if needed.
+csi:
+  enabled: false
+
+# DECISION: Enable UI for production management.
+# Why: The UI is helpful for managing policies, auth methods, and secrets
+#      engines in a production environment.
+ui:
+  enabled: true

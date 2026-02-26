@@ -10,19 +10,18 @@ The Harmony Tutor plugin (`k8s_harmony`) handles Ingress creation, TLS settings,
 |----------|---------|
 | RKE2 cluster | 3 masters + 3 workers across 3 EU data centers |
 | Ingress controller | nginx via Harmony chart (hostPort DaemonSet + dedicated LB) |
-| TLS | cert-manager with Route53 DNS-01 ClusterIssuer (`harmony-letsencrypt-global`) |
-| Storage | Longhorn (`longhorn` StorageClass, default). Hetzner CSI is disabled in this example. |
+| TLS | cert-manager with Route53 DNS-01 ClusterIssuer (deployed via Helmfile) |
+| Storage | Configured by operator via Helmfile (Longhorn, Hetzner CSI, or both) |
 | DNS | Route53 A + wildcard CNAME records |
 
 > [!NOTE]
-> **Out-of-the-box HTTPS (no “Fake Certificate”)**: when Harmony is enabled, the module bootstraps a
-> default TLS certificate for the apex `domain` and configures Harmony's ingress-nginx to use it as
-> the `--default-ssl-certificate`. This avoids the ingress-nginx self-signed fallback certificate
-> during the window *before* Tutor creates per-host Ingress resources.
+> **HTTPS via Helmfile addons**: after `tofu apply`, deploy cert-manager and Harmony
+> via Helmfile (`charts/README.md`). The ClusterIssuer and ingress-nginx configuration
+> are managed there, not by this Terraform module.
 
 ## Prerequisites
 
-- [OpenTofu](https://opentofu.org/) or Terraform >= 1.5
+- [OpenTofu](https://opentofu.org/) or Terraform >= 1.7
 - Hetzner Cloud account + API token
 - AWS account with a Route53 hosted zone
 - [Tutor](https://docs.tutor.edly.io/) >= 18
@@ -78,9 +77,9 @@ tutor k8s init    # migrations + initial setup (~15-30 min on first run)
 ```
 
 The plugin creates Ingress resources for each host (LMS, CMS, MFE) with:
-- `cert-manager.io/cluster-issuer: harmony-letsencrypt-global` — matched by this module's ClusterIssuer
+- `cert-manager.io/cluster-issuer: harmony-letsencrypt-global` — matched by the ClusterIssuer deployed via Helmfile (`charts/cert-manager/`)
 - `ingressClassName: nginx` — matched by Harmony's ingress-nginx
-- `nginx.ingress.kubernetes.io/proxy-body-size: 100m` — matched by this module's ingress controller config
+- `nginx.ingress.kubernetes.io/proxy-body-size: 100m` — matched by Harmony's ingress-nginx config
 
 ### 6. Verify
 

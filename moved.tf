@@ -205,91 +205,126 @@ moved {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Addons module (modules/addons/) — 24 blocks                              ║
+# ║  Addons module (REMOVED) — moved + removed chains                         ║
+# ║                                                                            ║
+# ║  DECISION: All L4 addons (HCCM, CSI, cert-manager, Longhorn, Harmony,     ║
+# ║  ingress, self-maintenance) are removed from Terraform management.         ║
+# ║  They are now deployed via Helmfile (charts/).                             ║
+# ║  Why: L3/L4 separation — Terraform manages infrastructure only.           ║
+# ║                                                                            ║
+# ║  The moved blocks preserve the migration chain so that state at ANY        ║
+# ║  position (root, module count, module for_each) is properly handled.       ║
+# ║  The removed blocks at the end of each chain tell OpenTofu to drop the     ║
+# ║  final address from state WITHOUT destroying real resources.               ║
+# ║                                                                            ║
+# ║  TODO: Remove this entire section after all known deployments have         ║
+# ║        applied at least once with this version.                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
-# --- HCCM (count → for_each migration) ---
+# --- HCCM ---
 
-# Step 1: root → module (count address)
 moved {
   from = kubernetes_secret_v1.hcloud_ccm
   to   = module.addons.kubernetes_secret_v1.cloud_controller_token[0]
 }
-
-# Step 2: count[0] → for_each["key"]
 moved {
   from = module.addons.kubernetes_secret_v1.cloud_controller_token[0]
   to   = module.addons.kubernetes_secret_v1.cloud_controller_token["hcloud-ccm"]
+}
+removed {
+  from = module.addons.kubernetes_secret_v1.cloud_controller_token
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.hccm
   to   = module.addons.helm_release.cloud_controller[0]
 }
-
 moved {
   from = module.addons.helm_release.cloud_controller[0]
   to   = module.addons.helm_release.cloud_controller["hccm"]
 }
+removed {
+  from = module.addons.helm_release.cloud_controller
+  lifecycle { destroy = false }
+}
 
-# --- CSI (count → for_each migration) ---
+# --- CSI ---
 
 moved {
   from = kubernetes_secret_v1.hcloud_csi
   to   = module.addons.kubernetes_secret_v1.hcloud_csi[0]
 }
-
 moved {
   from = module.addons.kubernetes_secret_v1.hcloud_csi[0]
   to   = module.addons.kubernetes_secret_v1.hcloud_csi["hcloud-csi"]
+}
+removed {
+  from = module.addons.kubernetes_secret_v1.hcloud_csi
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.hcloud_csi
   to   = module.addons.helm_release.hcloud_csi[0]
 }
-
 moved {
   from = module.addons.helm_release.hcloud_csi[0]
   to   = module.addons.helm_release.hcloud_csi["hcloud-csi"]
 }
+removed {
+  from = module.addons.helm_release.hcloud_csi
+  lifecycle { destroy = false }
+}
 
-# --- cert-manager (count → for_each migration) ---
+# --- cert-manager ---
 
 moved {
   from = kubernetes_namespace_v1.cert_manager
   to   = module.addons.kubernetes_namespace_v1.certificate_manager[0]
 }
-
 moved {
   from = module.addons.kubernetes_namespace_v1.certificate_manager[0]
   to   = module.addons.kubernetes_namespace_v1.certificate_manager["cert-manager"]
 }
+removed {
+  from = module.addons.kubernetes_namespace_v1.certificate_manager
+  lifecycle { destroy = false }
+}
 
-# NOTE: dns_solver_credentials stays count-based (sensitive var.aws_access_key in condition)
 moved {
   from = kubernetes_secret_v1.cert_manager
   to   = module.addons.kubernetes_secret_v1.dns_solver_credentials
+}
+removed {
+  from = module.addons.kubernetes_secret_v1.dns_solver_credentials
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.cert_manager
   to   = module.addons.helm_release.certificate_manager[0]
 }
-
 moved {
   from = module.addons.helm_release.certificate_manager[0]
   to   = module.addons.helm_release.certificate_manager["cert-manager"]
+}
+removed {
+  from = module.addons.helm_release.certificate_manager
+  lifecycle { destroy = false }
 }
 
 moved {
   from = kubectl_manifest.cert_manager_issuer
   to   = module.addons.kubectl_manifest.letsencrypt_cluster_issuer[0]
 }
-
 moved {
   from = module.addons.kubectl_manifest.letsencrypt_cluster_issuer[0]
   to   = module.addons.kubectl_manifest.letsencrypt_cluster_issuer["issuer"]
+}
+removed {
+  from = module.addons.kubectl_manifest.letsencrypt_cluster_issuer
+  lifecycle { destroy = false }
 }
 
 # --- Longhorn ---
@@ -298,35 +333,63 @@ moved {
   from = kubernetes_namespace_v1.longhorn
   to   = module.addons.kubernetes_namespace_v1.longhorn
 }
+removed {
+  from = module.addons.kubernetes_namespace_v1.longhorn
+  lifecycle { destroy = false }
+}
 
 moved {
   from = kubernetes_secret_v1.longhorn_s3
   to   = module.addons.kubernetes_secret_v1.longhorn_s3
+}
+removed {
+  from = module.addons.kubernetes_secret_v1.longhorn_s3
+  lifecycle { destroy = false }
 }
 
 moved {
   from = kubectl_manifest.longhorn_iscsi_installer
   to   = module.addons.kubectl_manifest.longhorn_iscsi_installer
 }
+removed {
+  from = module.addons.kubectl_manifest.longhorn_iscsi_installer
+  lifecycle { destroy = false }
+}
 
 moved {
   from = kubernetes_labels.longhorn_worker
   to   = module.addons.kubernetes_labels.longhorn_worker
+}
+removed {
+  from = module.addons.kubernetes_labels.longhorn_worker
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.longhorn
   to   = module.addons.helm_release.longhorn
 }
+removed {
+  from = module.addons.helm_release.longhorn
+  lifecycle { destroy = false }
+}
 
 moved {
   from = terraform_data.longhorn_health_check
   to   = module.addons.terraform_data.longhorn_health_check
 }
+removed {
+  from = module.addons.terraform_data.longhorn_health_check
+  lifecycle { destroy = false }
+}
 
 moved {
   from = terraform_data.longhorn_pre_upgrade_snapshot
   to   = module.addons.terraform_data.longhorn_pre_upgrade_snapshot
+}
+removed {
+  from = module.addons.terraform_data.longhorn_pre_upgrade_snapshot
+  lifecycle { destroy = false }
 }
 
 # --- Ingress controller ---
@@ -335,74 +398,96 @@ moved {
   from = kubectl_manifest.ingress_configuration
   to   = module.addons.kubectl_manifest.ingress_configuration
 }
+removed {
+  from = module.addons.kubectl_manifest.ingress_configuration
+  lifecycle { destroy = false }
+}
 
-# --- Harmony (count → for_each migration) ---
+# --- Harmony ---
 
 moved {
   from = kubernetes_namespace_v1.harmony
   to   = module.addons.kubernetes_namespace_v1.harmony[0]
 }
-
 moved {
   from = module.addons.kubernetes_namespace_v1.harmony[0]
   to   = module.addons.kubernetes_namespace_v1.harmony["harmony"]
+}
+removed {
+  from = module.addons.kubernetes_namespace_v1.harmony
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.harmony
   to   = module.addons.helm_release.harmony[0]
 }
-
 moved {
   from = module.addons.helm_release.harmony[0]
   to   = module.addons.helm_release.harmony["harmony"]
 }
+removed {
+  from = module.addons.helm_release.harmony
+  lifecycle { destroy = false }
+}
 
-# --- Self-maintenance (count → for_each migration) ---
+# --- Self-maintenance ---
 
 moved {
   from = kubernetes_namespace_v1.kured
   to   = module.addons.kubernetes_namespace_v1.reboot_daemon[0]
 }
-
 moved {
   from = module.addons.kubernetes_namespace_v1.reboot_daemon[0]
   to   = module.addons.kubernetes_namespace_v1.reboot_daemon["kured"]
+}
+removed {
+  from = module.addons.kubernetes_namespace_v1.reboot_daemon
+  lifecycle { destroy = false }
 }
 
 moved {
   from = helm_release.kured
   to   = module.addons.helm_release.reboot_daemon[0]
 }
-
 moved {
   from = module.addons.helm_release.reboot_daemon[0]
   to   = module.addons.helm_release.reboot_daemon["kured"]
 }
-
-# NOTE: SUC CRDs, namespace, and controller use sha1(content) as for_each keys.
-# These are dynamic hashes computed at plan time — moved blocks cannot target them.
-# The old count-based resources will be destroyed and recreated with hash keys.
-# This is safe because CRDs and namespace manifests are declarative/idempotent.
-# TODO: Remove these stale moved blocks in the next major version once all
-#       deployments have applied at least once with the new for_each keys.
+removed {
+  from = module.addons.helm_release.reboot_daemon
+  lifecycle { destroy = false }
+}
 
 moved {
   from = kubectl_manifest.system_upgrade_controller_server_plan
   to   = module.addons.kubectl_manifest.suc_server_upgrade_plan[0]
 }
-
 moved {
   from = module.addons.kubectl_manifest.suc_server_upgrade_plan[0]
   to   = module.addons.kubectl_manifest.suc_server_upgrade_plan["server-plan"]
+}
+removed {
+  from = module.addons.kubectl_manifest.suc_server_upgrade_plan
+  lifecycle { destroy = false }
 }
 
 moved {
   from = kubectl_manifest.system_upgrade_controller_agent_plan
   to   = module.addons.kubectl_manifest.suc_agent_upgrade_plan[0]
 }
-
 moved {
   from = module.addons.kubectl_manifest.suc_agent_upgrade_plan[0]
   to   = module.addons.kubectl_manifest.suc_agent_upgrade_plan["agent-plan"]
+}
+removed {
+  from = module.addons.kubectl_manifest.suc_agent_upgrade_plan
+  lifecycle { destroy = false }
+}
+
+# --- Addon infrastructure anchor ---
+
+removed {
+  from = module.addons.terraform_data.wait_for_infrastructure
+  lifecycle { destroy = false }
 }

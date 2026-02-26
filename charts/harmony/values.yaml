@@ -1,0 +1,41 @@
+# OpenEdX Harmony Helm values
+# Chart: openedx/harmony-chart
+# Ref: https://github.com/openedx/openedx-k8s-harmony
+#
+# DECISION: Harmony bundles ingress-nginx + cert-manager sub-charts.
+# We disable cert-manager (managed separately) and configure ingress-nginx
+# for hostPort+DaemonSet to work with Hetzner's load balancer architecture.
+#
+# NOTE: Replace placeholder values before deploying:
+#   - CLUSTER_DOMAIN: your cluster domain (e.g., example.com)
+#   - NOTIFICATION_EMAIL: Let's Encrypt contact email
+#   - PROXY_BODY_SIZE: max upload size (e.g., "100m")
+
+clusterDomain: "CLUSTER_DOMAIN"
+notificationEmail: "NOTIFICATION_EMAIL"
+
+# DECISION: Use hostPort + DaemonSet for ingress-nginx.
+# Why: Traffic flows through the single Hetzner ingress LB directly to
+#      worker node hostPorts. This avoids HCCM creating a second Hetzner
+#      Cloud LB via Kubernetes Service type=LoadBalancer.
+ingress-nginx:
+  controller:
+    kind: DaemonSet
+    hostPort:
+      enabled: true
+    service:
+      type: ClusterIP
+    config:
+      proxy-body-size: "100m"
+    # WORKAROUND: Default SSL certificate to avoid "Fake Certificate" on HTTPS.
+    # Why: Without this, ingress-nginx serves its self-signed cert for the
+    #      catch-all server. Browsers show a scary TLS error.
+    # See: https://kubernetes.github.io/ingress-nginx/user-guide/tls/#default-ssl-certificate
+    extraArgs:
+      default-ssl-certificate: "harmony/harmony-default-tls"
+
+# DECISION: cert-manager is deployed separately (not via Harmony sub-chart).
+# Why: Dedicated cert-manager deployment gives us Route53 DNS-01 solver
+#      configuration and independent lifecycle management.
+cert-manager:
+  enabled: false

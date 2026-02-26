@@ -15,23 +15,29 @@ resource "random_id" "control_plane_suffix" {
   byte_length = 4
 }
 
-# NOTE: Token length (48) and special=false are derived from upstream
-# wenzel-felix/terraform-hcloud-rke2 (MIT). Resource renamed from
-# "rke2_token" to "cluster_join_secret".
-# See: NOTICE — Upstream-derived patterns, C3
 resource "random_password" "cluster_join_secret" {
   length  = 48
   special = false
 }
 
+# DECISION: Generate a one-time bootstrap token for OpenBao initial access.
+# Why: After Helmfile deploys OpenBao in dev mode, the operator needs a
+#      pre-shared token to log in and retrieve the kubeconfig. This token
+#      is used as devRootToken — the operator MUST revoke it after setting
+#      up proper auth (OIDC, LDAP, UserPass).
+# SECURITY: Token is 32 chars alphanumeric (no special chars for CLI safety).
+#           Marked sensitive — never appears in plan output or logs.
+#           Stored only in Terraform state (protect with encrypted backend).
+resource "random_password" "openbao_bootstrap_token" {
+  count   = var.openbao_enabled ? 1 : 0
+  length  = 32
+  special = false
+}
+
 locals {
-  # DECISION: Support separate master/worker placement lists.
-  # Why: Masters can be spread across more DCs for control-plane resilience,
-  #      while workers can be confined to fewer DCs (e.g., Germany-only) to
-  #      minimize cross-DC storage latency for stateful workloads.
-  # NOTE: Empty lists fall back to node_locations for backward compatibility.
-  effective_master_locations = length(var.master_node_locations) > 0 ? var.master_node_locations : var.node_locations
-  effective_worker_locations = length(var.worker_node_locations) > 0 ? var.worker_node_locations : var.node_locations
+  # NOTE: Root module already resolves master/worker location fallback
+  # (empty → node_locations) before passing to this module. No fallback needed here.
+  # See: main.tf locals.effective_master_locations / effective_worker_locations
 
   # Pre-compute server name prefix to avoid repeating the pattern.
   master_name_prefix = "${var.rke2_cluster_name}-master"
@@ -43,33 +49,6 @@ locals {
   common_labels = {
     "cluster-name" = var.rke2_cluster_name
     "managed-by"   = "opentofu"
-  }
-
-  # NOTE: Reserved documentation/guardrail hints.
-  # Why: This module is intentionally verbose about operational intent.
-  #      Keeping these constants in locals is harmless (no resources depend on
-  #      them) but helps future refactors stay consistent.
-  _conventions = {
-    roles = {
-      control_plane = "control-plane"
-      agent         = "agent"
-    }
-
-    name_parts = {
-      master_prefix = local.master_name_prefix
-      worker_prefix = local.worker_name_prefix
-    }
-
-    ports = {
-      kube_api      = 6443
-      rke2_register = 9345
-      ssh           = 22
-    }
-
-    labels = {
-      bootstrap_key   = "bootstrap"
-      bootstrap_value = "true"
-    }
   }
 }
 
@@ -86,7 +65,7 @@ resource "hcloud_server" "initial_control_plane" {
   name         = "${local.master_name_prefix}-${lower(random_id.control_plane_suffix[0].hex)}"
   image        = var.master_node_image
   server_type  = var.master_node_server_type
-  location     = element(local.effective_master_locations, 0)
+  location     = element(var.master_node_locations, 0)
   firewall_ids = [hcloud_firewall.cluster.id]
   ssh_keys     = [hcloud_ssh_key.cluster.id]
 
@@ -122,10 +101,6 @@ resource "hcloud_server" "initial_control_plane" {
     #   For production, use branch protection + review + targeted plans as the primary
     #   control against accidental control-plane replacement.
 
-    # NOTE: The [user_data, image, server_type] triple + create_before_destroy
-    # is derived from upstream wenzel-felix/terraform-hcloud-rke2 (MIT).
-    # Extended here with 'labels' (4-tuple).
-    # See: NOTICE — Upstream-derived patterns, C4
     ignore_changes = [
       user_data,
       image,
@@ -156,7 +131,7 @@ resource "hcloud_server" "control_plane" {
 
   # NOTE: Use modulo to allow shorter location lists than control_plane_count.
   # This keeps behavior predictable (round-robin) while avoiding index errors.
-  location = element(local.effective_master_locations, (count.index + 1) % length(local.effective_master_locations))
+  location = element(var.master_node_locations, (count.index + 1) % length(var.master_node_locations))
 
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
   # See: cloudinit.tf for structured cloud-init config.
@@ -175,7 +150,6 @@ resource "hcloud_server" "control_plane" {
   )
 
   lifecycle {
-    # NOTE: Same upstream-derived lifecycle pattern as master-0 — see C4 above.
     ignore_changes = [
       user_data,
       image,
@@ -209,7 +183,7 @@ resource "hcloud_server" "agent" {
   firewall_ids = [hcloud_firewall.cluster.id]
   ssh_keys     = [hcloud_ssh_key.cluster.id]
 
-  location = element(local.effective_worker_locations, count.index % length(local.effective_worker_locations))
+  location = element(var.worker_node_locations, count.index % length(var.worker_node_locations))
 
   # SECURITY: user_data contains RKE2 join token — see master[0] comment.
   # See: cloudinit.tf for structured cloud-init config.
@@ -228,7 +202,6 @@ resource "hcloud_server" "agent" {
   )
 
   lifecycle {
-    # NOTE: Same upstream-derived lifecycle pattern as master-0 — see C4 above.
     ignore_changes = [
       user_data,
       image,

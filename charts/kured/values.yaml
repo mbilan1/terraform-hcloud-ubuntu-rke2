@@ -1,0 +1,23 @@
+# Kured Helm values — Kubernetes Reboot Daemon
+# Chart: kubereboot/kured
+# Ref: https://kured.dev/docs/
+#
+# DECISION: Kured for automated OS reboot scheduling after `apt upgrade`.
+# Why: Ubuntu unattended-upgrades can install kernel patches, but a reboot
+#      is needed to activate them. Kured coordinates node-by-node reboot
+#      with cordon/drain to maintain workload availability.
+#
+# NOTE: Only effective on HA clusters (>=3 masters).
+# On single-master clusters, rebooting the master loses etcd quorum.
+
+configuration:
+  period: "1h0m0s"
+
+# NOTE: Resource requests/limits follow container best practices (gate #145).
+resources:
+  requests:
+    cpu: "10m"
+    memory: "32Mi"
+  limits:
+    cpu: "100m"
+    memory: "64Mi"

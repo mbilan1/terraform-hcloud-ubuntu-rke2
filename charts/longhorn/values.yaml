@@ -1,0 +1,65 @@
+# Longhorn Helm values — distributed block storage
+# Chart: longhorn/longhorn
+# Ref: https://longhorn.io/docs/latest/deploy/install/install-with-helm/
+#
+# DECISION: Longhorn as primary storage driver (replaces Hetzner CSI).
+# Why: Replication across workers (HA). Local NVMe IOPS (~50K vs ~10K).
+#      VolumeSnapshot support. Native S3 backup. Instant COW snapshots.
+#
+# NOTE: Longhorn requires open-iscsi on worker nodes.
+# Deploy the iSCSI installer DaemonSet from manifests/ before installing Longhorn.
+
+defaultSettings:
+  # DECISION: Schedule data replicas only on workers.
+  # Why: Protects master disk space and etcd performance.
+  systemManagedComponentsNodeSelector: "node-role.kubernetes.io/worker:true"
+  defaultReplicaCount: 2
+  createDefaultDiskLabeledNodes: false
+
+  # Storage locality and rebalancing
+  defaultDataLocality: "best-effort"
+  disableRevisionCounter: "true"
+  replicaAutoBalance: "best-effort"
+
+  # Resource guarantees
+  guaranteedInstanceManagerCPU: 12
+
+  # Storage provisioning limits
+  storageOverProvisioningPercentage: 200
+  storageMinimalAvailablePercentage: 15
+
+  # Snapshot management
+  snapshotMaxCount: 10
+  autoCleanupSnapshotWhenDeleteBackup: true
+  autoSalvage: true
+
+  # Drain policy: allow if replicas are stopped (safe for rolling updates)
+  nodeDrainPolicy: "allow-if-replica-is-stopped"
+  concurrentReplicaRebuildPerNodeLimit: 3
+
+  # S3 Backup (uncomment and configure for backup)
+  # backupTarget: "s3://your-bucket@your-region/"
+  # backupTargetCredentialSecret: "longhorn-s3-credentials"
+
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: 2
+  reclaimPolicy: "Retain"
+  defaultDataLocality: "best-effort"
+  disableRevisionCounter: "true"
+
+longhornUI:
+  enabled: true
+
+# Recurring backup job (uncomment when S3 backup is configured)
+# recurringJobSelector:
+#   - name: backup-all
+#     isGroup: true
+# longhornRecurringJobs:
+#   - name: snapshot-and-backup
+#     task: backup
+#     cron: "0 2 * * *"
+#     retain: 14
+#     concurrency: 2
+#     labels:
+#       recurring-job-group.longhorn.io/default: "enabled"

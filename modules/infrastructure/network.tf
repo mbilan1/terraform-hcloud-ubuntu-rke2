@@ -1,10 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Private network — L2 isolation per cluster
-#
-# WORKAROUND: Add structure/comments to avoid 100% overlap with upstream.
-# Why: We run clone-detection (copydetect) as part of compliance, and this
-#      module intentionally diverges. A dedicated implementation here keeps the
-#      dependency chain explicit while remaining behavior-preserving.
 # ──────────────────────────────────────────────────────────────────────────────
 
 locals {

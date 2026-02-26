@@ -145,6 +145,11 @@ variable "harmony_enabled" {
   type        = bool
 }
 
+variable "openbao_enabled" {
+  description = "Whether OpenBao secrets management is enabled (generates bootstrap token)"
+  type        = bool
+}
+
 # --- Cloud-init / RKE2 config ---
 # DECISION: Cloud-init is inlined into infrastructure module (not a separate bootstrap module).
 # Why: Cloud-init needs LB IPv4 + RKE2 token (both created in L3). Separating it
@@ -183,6 +188,9 @@ variable "etcd_backup" {
     s3_secret_key         = string
     s3_region             = string
     s3_bucket_lookup_type = string
+    # NOTE: Optional metadata — not consumed by cloud-init, but passed through
+    # from root module for consistency. Prevents "unsupported attribute" errors.
+    description = optional(string, "")
   })
   sensitive = true
 }

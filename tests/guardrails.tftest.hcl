@@ -7,7 +7,7 @@
 # See: docs/ARCHITECTURE.md
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ── Mock all 11 providers so plan runs without credentials ──────────────────
+# ── Mock all 7 providers so plan runs without credentials ───────────────────
 #
 # WORKAROUND: Hetzner provider uses numeric IDs internally, but Terraform
 # resource `id` attribute is always a string. With mock providers, the
@@ -56,26 +56,15 @@ mock_provider "hcloud" {
   }
 }
 
-# WORKAROUND: remote_file mock must return empty content to avoid yamldecode()
-# failure in locals.tf kubeconfig parsing. Empty string triggers the safe
-# conditional branch: `content == "" ? "" : base64decode(yamldecode(...))`.
-mock_provider "remote" {
-  mock_data "remote_file" {
-    defaults = {
-      content = ""
-    }
-  }
-}
+# NOTE: data "external" returns a result map with kubeconfig_b64 key.
+# Empty string produces empty kubeconfig via try() fallback in locals.tf.
+mock_provider "external" {}
 
 mock_provider "aws" {}
-mock_provider "kubectl" {}
-mock_provider "kubernetes" {}
-mock_provider "helm" {}
 mock_provider "cloudinit" {}
 mock_provider "random" {}
 mock_provider "tls" {}
 mock_provider "local" {}
-mock_provider "http" {}
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  UT-G01: aws_credentials_pair_consistency                                  ║
@@ -87,7 +76,6 @@ run "aws_credentials_rejects_partial" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     aws_access_key   = "AKIAEXAMPLE"
     aws_secret_key   = ""
   }
@@ -101,7 +89,6 @@ run "aws_credentials_accepts_both_set" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     aws_access_key   = "AKIAEXAMPLE"
     aws_secret_key   = "secretkey123"
   }
@@ -113,109 +100,8 @@ run "aws_credentials_accepts_both_empty" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     aws_access_key   = ""
     aws_secret_key   = ""
-  }
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G02: letsencrypt_email_required_when_issuer_enabled                    ║
-# ║  cert_manager with route53_zone_id but no email → warning                  ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "letsencrypt_email_required_with_route53" {
-  command = plan
-
-  variables {
-    cluster_domain     = "example.com"
-    hcloud_api_token   = "mock-token"
-    domain             = "test.example.com"
-    route53_zone_id    = "Z1234567890"
-    letsencrypt_issuer = ""
-    aws_access_key     = "AKIAEXAMPLE"
-    aws_secret_key     = "secretkey123"
-  }
-
-  expect_failures = [check.letsencrypt_email_required_when_issuer_enabled]
-}
-
-run "letsencrypt_email_passes_when_set" {
-  command = plan
-
-  variables {
-    cluster_domain     = "example.com"
-    hcloud_api_token   = "mock-token"
-    domain             = "test.example.com"
-    route53_zone_id    = "Z1234567890"
-    letsencrypt_issuer = "admin@example.com"
-    aws_access_key     = "AKIAEXAMPLE"
-    aws_secret_key     = "secretkey123"
-  }
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G03: system_upgrade_controller_version_format                          ║
-# ║  Version must be numeric semver (no 'v' prefix)                            ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "suc_version_rejects_v_prefix" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      self_maintenance = {
-        system_upgrade_controller_version = "v0.13.4"
-      }
-    }
-  }
-
-  expect_failures = [check.system_upgrade_controller_version_format]
-}
-
-run "suc_version_accepts_valid" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      self_maintenance = {
-        system_upgrade_controller_version = "0.13.4"
-      }
-    }
-  }
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G04: remote_manifest_downloads_required_for_selected_features          ║
-# ║  auto k8s updates ON + downloads OFF → warning                             ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "remote_downloads_required_for_k8s_updates" {
-  command = plan
-
-  variables {
-    cluster_domain                  = "example.com"
-    hcloud_api_token                = "mock-token"
-    domain                          = "test.example.com"
-    enable_auto_kubernetes_updates  = true
-    allow_remote_manifest_downloads = false
-  }
-
-  expect_failures = [check.remote_manifest_downloads_required_for_selected_features]
-}
-
-run "remote_downloads_passes_when_enabled" {
-  command = plan
-
-  variables {
-    cluster_domain                  = "example.com"
-    hcloud_api_token                = "mock-token"
-    domain                          = "test.example.com"
-    enable_auto_kubernetes_updates  = true
-    allow_remote_manifest_downloads = true
   }
 }
 
@@ -229,7 +115,6 @@ run "workers_country_policy_passes_germany" {
   variables {
     cluster_domain                 = "example.com"
     hcloud_api_token               = "mock-token"
-    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["nbg1", "fsn1"]
   }
@@ -241,7 +126,6 @@ run "workers_country_policy_passes_finland" {
   variables {
     cluster_domain                 = "example.com"
     hcloud_api_token               = "mock-token"
-    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["hel1"]
   }
@@ -253,7 +137,6 @@ run "workers_country_policy_rejects_mixed" {
   variables {
     cluster_domain                 = "example.com"
     hcloud_api_token               = "mock-token"
-    domain                         = "test.example.com"
     enforce_single_country_workers = true
     worker_node_locations          = ["hel1", "nbg1"]
   }
@@ -271,7 +154,6 @@ run "kubernetes_version_rejects_bad_format" {
   variables {
     cluster_domain     = "example.com"
     hcloud_api_token   = "mock-token"
-    domain             = "test.example.com"
     kubernetes_version = "1.31.6"
   }
 
@@ -286,7 +168,6 @@ run "kubernetes_version_accepts_empty" {
   variables {
     cluster_domain     = "example.com"
     hcloud_api_token   = "mock-token"
-    domain             = "test.example.com"
     kubernetes_version = ""
   }
 }
@@ -297,67 +178,12 @@ run "kubernetes_version_accepts_valid_format" {
   variables {
     cluster_domain     = "example.com"
     hcloud_api_token   = "mock-token"
-    domain             = "test.example.com"
     kubernetes_version = "v1.31.6+rke2r1"
   }
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G06: auto_updates_require_ha (cluster-selfmaintenance.tf)              ║
-# ║  Auto-updates ON + single master → warning                                 ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "auto_updates_warns_on_single_master" {
-  command = plan
-
-  variables {
-    cluster_domain         = "example.com"
-    hcloud_api_token       = "mock-token"
-    domain                 = "test.example.com"
-    control_plane_count    = 1
-    enable_auto_os_updates = true
-  }
-
-  expect_failures = [check.auto_updates_require_ha]
-}
-
-run "auto_updates_passes_on_ha" {
-  command = plan
-
-  variables {
-    cluster_domain         = "example.com"
-    hcloud_api_token       = "mock-token"
-    domain                 = "test.example.com"
-    control_plane_count    = 3
-    enable_auto_os_updates = true
-  }
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G07: harmony_requires_cert_manager (cluster-harmony.tf)                ║
-# ║  Harmony ON + cert_manager OFF → warning                                   ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "harmony_requires_cert_manager" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    harmony = {
-      enabled = true
-    }
-    cluster_configuration = {
-      cert_manager = {
-        preinstall = false
-      }
-    }
-  }
-
-  expect_failures = [check.harmony_requires_cert_manager]
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G08: harmony_requires_workers_for_lb (cluster-harmony.tf)              ║
+# ║  UT-G08: harmony_requires_workers_for_lb                                   ║
 # ║  Harmony ON + 0 workers → warning                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 run "harmony_requires_workers" {
@@ -366,11 +192,8 @@ run "harmony_requires_workers" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     agent_node_count = 0
-    harmony = {
-      enabled = true
-    }
+    harmony_enabled  = true
   }
 
   expect_failures = [check.harmony_requires_workers_for_lb]
@@ -400,7 +223,6 @@ run "etcd_backup_rejects_missing_s3" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled = true
@@ -418,7 +240,6 @@ run "etcd_backup_passes_with_s3" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled       = true
@@ -436,7 +257,6 @@ run "etcd_backup_passes_when_disabled" {
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
     cluster_configuration = {
       etcd_backup = {
         enabled = false
@@ -446,214 +266,51 @@ run "etcd_backup_passes_when_disabled" {
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G14: longhorn_and_csi_default_sc_exclusivity                           ║
-# ║  Both Longhorn and CSI as default StorageClass → warning                   ║
+# ║  UT-G14: openbao_requires_workers                                          ║
+# ║  OpenBao enabled without workers → warning                                 ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "longhorn_and_csi_both_default_rejects" {
+run "openbao_requires_workers" {
   command = plan
 
   variables {
     cluster_domain   = "example.com"
     hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall            = true
-        default_storage_class = true
-      }
-      hcloud_csi = {
-        preinstall            = true
-        default_storage_class = true
-      }
-    }
+    agent_node_count = 0
+    openbao_enabled  = true
   }
 
-  expect_failures = [
-    check.longhorn_and_csi_default_sc_exclusivity,
-    check.longhorn_experimental_warning,
-  ]
-}
-
-run "longhorn_default_csi_not_default_passes" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall            = true
-        default_storage_class = true
-      }
-      hcloud_csi = {
-        preinstall            = true
-        default_storage_class = false
-      }
-    }
-  }
-
-  # NOTE: Longhorn experimental warning always fires when preinstall = true
-  expect_failures = [check.longhorn_experimental_warning]
+  expect_failures = [check.openbao_requires_workers]
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G15: longhorn_experimental_warning                                     ║
-# ║  Longhorn enabled → experimental warning                                   ║
+# ║  UT-G15: openbao_requires_secrets_encryption                               ║
+# ║  OpenBao enabled without secrets encryption → warning                      ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "longhorn_experimental_warning_fires" {
+run "openbao_requires_secrets_encryption" {
   command = plan
 
   variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall = true
-      }
-    }
+    cluster_domain            = "example.com"
+    hcloud_api_token          = "mock-token"
+    openbao_enabled           = true
+    enable_secrets_encryption = false
   }
 
-  expect_failures = [
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
-}
-
-run "longhorn_experimental_warning_does_not_fire_when_disabled" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-  }
+  expect_failures = [check.openbao_requires_secrets_encryption]
 }
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G16: longhorn_backup_requires_s3_config                                ║
-# ║  Longhorn backup_target without S3 credentials → warning                   ║
+# ║  UT-G16: openbao_passes_with_valid_config                                  ║
+# ║  OpenBao enabled with workers + encryption → pass                          ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
-run "longhorn_backup_rejects_missing_s3" {
+run "openbao_passes_with_valid_config" {
   command = plan
 
   variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall    = true
-        backup_target = "s3://my-bucket@eu-central/backups"
-        # s3_access_key, s3_secret_key intentionally omitted (empty defaults)
-      }
-    }
+    cluster_domain            = "example.com"
+    hcloud_api_token          = "mock-token"
+    agent_node_count          = 3
+    openbao_enabled           = true
+    enable_secrets_encryption = true
   }
-
-  expect_failures = [
-    check.longhorn_backup_requires_s3_config,
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
 }
-
-run "longhorn_backup_passes_with_s3" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall    = true
-        backup_target = "s3://my-bucket@eu-central/backups"
-        s3_access_key = "AKIAEXAMPLE"
-        s3_secret_key = "secretkey123"
-      }
-    }
-  }
-
-  # NOTE: This also expects the experimental warning (it always fires when enabled)
-  # NOTE: SC exclusivity fires because both longhorn and hcloud_csi default to default_storage_class = true
-  expect_failures = [
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
-}
-
-run "longhorn_backup_passes_without_target" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    cluster_configuration = {
-      longhorn = {
-        preinstall = true
-        # No backup_target → S3 config not required
-      }
-    }
-  }
-
-  # NOTE: Experimental warning still fires
-  # NOTE: SC exclusivity fires because both longhorn and hcloud_csi default to default_storage_class = true
-  expect_failures = [
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
-}
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  UT-G17: longhorn_minimum_workers                                          ║
-# ║  Longhorn RF=2 with only 1 worker → warning                               ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-run "longhorn_rejects_insufficient_workers" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    agent_node_count = 1
-    cluster_configuration = {
-      longhorn = {
-        preinstall    = true
-        replica_count = 2
-      }
-    }
-  }
-
-  expect_failures = [
-    check.longhorn_minimum_workers,
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
-}
-
-run "longhorn_passes_with_enough_workers" {
-  command = plan
-
-  variables {
-    cluster_domain   = "example.com"
-    hcloud_api_token = "mock-token"
-    domain           = "test.example.com"
-    agent_node_count = 3
-    cluster_configuration = {
-      longhorn = {
-        preinstall    = true
-        replica_count = 2
-      }
-    }
-  }
-
-  # Only the experimental warning should fire, not the minimum workers check
-  # NOTE: SC exclusivity fires because both longhorn and hcloud_csi default to default_storage_class = true
-  expect_failures = [
-    check.longhorn_experimental_warning,
-    check.longhorn_and_csi_default_sc_exclusivity,
-  ]
-}
-

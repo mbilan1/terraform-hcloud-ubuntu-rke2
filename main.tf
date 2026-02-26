@@ -5,7 +5,7 @@
 # Why: HashiCorp "split a module" pattern — root declares variables/providers,
 #      child modules contain all resource logic. This gives clear layer boundaries:
 #        modules/infrastructure/ (L3) — servers, LBs, network, cloud-init, readiness
-#        modules/addons/         (L4) — Helm charts, K8s resources, lifecycle
+#        charts/                 (L4) — Helmfile + per-addon values (GitOps, not Terraform)
 # See: https://developer.hashicorp.com/terraform/language/modules/develop/refactoring
 #      docs/ARCHITECTURE.md — Module Architecture
 # ──────────────────────────────────────────────────────────────────────────────
@@ -65,7 +65,10 @@ module "infrastructure" {
   cluster_domain    = var.cluster_domain
 
   # Harmony toggle (controls ingress LB creation + cloud-init ingress disable)
-  harmony_enabled = var.harmony.enabled
+  harmony_enabled = var.harmony_enabled
+
+  # OpenBao toggle (generates bootstrap token when enabled)
+  openbao_enabled = var.openbao_enabled
 
   # Cloud-init / RKE2 config
   kubernetes_version        = var.kubernetes_version
@@ -77,38 +80,10 @@ module "infrastructure" {
   health_check_urls = var.health_check_urls
 }
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  L4: Addons — Helm charts, K8s resources, operational lifecycle            ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-module "addons" {
-  source = "./modules/addons"
-
-  # From infrastructure module
-  cluster_ready     = module.infrastructure.cluster_ready
-  master_ipv4       = module.infrastructure.master_ipv4
-  ssh_private_key   = module.infrastructure.ssh_private_key
-  network_name      = module.infrastructure.network_name
-  worker_node_names = module.infrastructure.worker_node_names
-
-  # Root passthrough
-  hcloud_api_token                = var.hcloud_api_token
-  cluster_configuration           = var.cluster_configuration
-  harmony                         = var.harmony
-  cluster_domain                  = var.cluster_domain
-  letsencrypt_issuer              = var.letsencrypt_issuer
-  cluster_issuer_name             = var.cluster_issuer_name
-  aws_region                      = var.aws_region
-  aws_access_key                  = var.aws_access_key
-  aws_secret_key                  = var.aws_secret_key
-  route53_zone_id                 = var.route53_zone_id
-  enable_nginx_modsecurity_waf    = var.enable_nginx_modsecurity_waf
-  nginx_ingress_proxy_body_size   = var.nginx_ingress_proxy_body_size
-  enable_auto_os_updates          = var.enable_auto_os_updates
-  enable_auto_kubernetes_updates  = var.enable_auto_kubernetes_updates
-  allow_remote_manifest_downloads = var.allow_remote_manifest_downloads
-  kubernetes_version              = var.kubernetes_version
-  agent_node_count                = var.agent_node_count
-  control_plane_count             = var.control_plane_count
-  load_balancer_location          = var.load_balancer_location
-}
+# DECISION: L4 (Kubernetes addons) is managed outside Terraform via Helmfile/ArgoCD/Flux.
+# Why: Terraform should own infrastructure (L3) only. Helm chart values change
+#      frequently and independently of infrastructure. Running `tofu apply` to
+#      change a Helm value risks touching servers, LBs, and DNS. GitOps tools
+#      (ArgoCD, Flux) or Helmfile provide a purpose-built deployment path.
+# See: charts/ directory for Helmfile configuration and per-addon values.
+# See: docs/ARCHITECTURE.md — Layer Separation

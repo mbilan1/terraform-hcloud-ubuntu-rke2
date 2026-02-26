@@ -9,11 +9,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.7.0"
 
   required_providers {
     # NOTE: Only the hcloud provider is needed at the example level.
-    # All other providers (kubernetes, helm, kubectl, aws, etc.) are
+    # All other providers (aws, cloudinit, tls, random, local) are
     # declared inside the module and configured via passthrough variables.
     hcloud = {
       source  = "hetznercloud/hcloud"
@@ -50,13 +50,13 @@ module "rke2" {
   source = "../.."
 
   hcloud_api_token = var.hcloud_token
-  domain           = var.cluster_domain
+  cluster_domain   = var.cluster_domain
 
   # Single master, no workers — cheapest possible cluster
   control_plane_count = local.defaults.control_plane_count
   agent_node_count    = local.defaults.agent_node_count
 
-  # Defaults: all addons enabled, no Harmony, no DNS
+  # Defaults: no Harmony, no DNS. L4 addons deployed separately via Helmfile.
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,4 @@ output "control_plane_lb_ipv4" {
   value       = module.rke2.control_plane_lb_ipv4
 }
 
-output "cluster_ready" {
-  description = "Dependency anchor for example consumers"
-  value       = module.rke2.cluster_ready
-}
+

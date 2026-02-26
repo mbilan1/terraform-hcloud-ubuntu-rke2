@@ -1,9 +1,13 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # SAST: tfsec
 #
-# Static security analysis. Best-effort — parser may fail on newer OpenTofu
-# constructs (top-level check blocks). Kept as non-blocking signal.
+# Static security analysis for Terraform/OpenTofu configurations.
 # Badge: SAST: tfsec
+#
+# DECISION: Hard-fail mode — security findings block merge.
+# Why: A soft-fail SAST gate creates false sense of security.
+#      --ignore-hcl-errors handles OpenTofu parser edge cases (check blocks)
+#      without silencing actual security findings.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: "SAST: tfsec"
@@ -26,12 +30,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Run tfsec
-        # tfsec parser may fail on newer Terraform/OpenTofu constructs
-        # (e.g. top-level check blocks). Keep this as best-effort signal.
-        continue-on-error: true
         uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           working_directory: .
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          soft_fail: true
+          soft_fail: false
           additional_args: --minimum-severity HIGH --ignore-hcl-errors

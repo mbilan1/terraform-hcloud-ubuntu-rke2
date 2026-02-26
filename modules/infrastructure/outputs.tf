@@ -3,7 +3,7 @@
 #
 # DECISION: Infrastructure module delivers a working cluster.
 # Why: L3 ensures API readiness, outputs kubeconfig credentials, and provides
-#      all values that downstream L4 (addons) needs.
+#      all values that external consumers (root module, GitOps tools) need.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # --- Kubeconfig credentials ---
@@ -73,29 +73,19 @@ output "worker_nodes_ipv4" {
   value       = hcloud_server.agent[*].ipv4_address
 }
 
-output "worker_node_names" {
-  description = "The names of all worker nodes (for kubernetes_labels in addons)"
-  value       = hcloud_server.agent[*].name
-}
-
-# --- SSH (for provisioners in addons module) ---
-
-output "master_ipv4" {
-  description = "IPv4 of master[0] for SSH provisioners"
-  value       = hcloud_server.initial_control_plane[0].ipv4_address
-}
-
-output "ssh_private_key" {
-  description = "The SSH private key for remote-exec provisioners"
-  value       = tls_private_key.ssh_identity.private_key_openssh
-  sensitive   = true
-}
-
 # --- Dependency anchors ---
 
 output "cluster_ready" {
   description = "Dependency anchor — downstream modules should depend on this"
   value       = terraform_data.wait_for_cluster_ready.id
+}
+
+# --- OpenBao (experimental) ---
+
+output "openbao_bootstrap_token" {
+  description = "One-time bootstrap token for initial OpenBao access. REVOKE after first use."
+  value       = var.openbao_enabled ? random_password.openbao_bootstrap_token[0].result : null
+  sensitive   = true
 }
 
 # --- Control-plane LB name (used in tests) ---
@@ -123,6 +113,7 @@ output "_test_counts" {
     dns_record           = length(aws_route53_record.wildcard)
     ingress_lb_targets   = length(hcloud_load_balancer_target.ingress_workers)
     pre_upgrade_snapshot = length(terraform_data.pre_upgrade_snapshot)
+    openbao_token        = length(random_password.openbao_bootstrap_token)
   }
 }
 

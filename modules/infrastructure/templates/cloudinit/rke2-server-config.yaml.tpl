@@ -3,9 +3,11 @@
 #
 # DECISION: Separate config.yaml from bootstrap script via cloudinit_config.
 # Why: HashiCorp best practice — use write_files for static config, shell script
-#      only for runtime logic (IP detection, install, start). The __NODE_IP__
+#      only for runtime logic (IP detection, install, start). The
+#      __RKE2_NODE_PRIVATE_IPV4__
 #      placeholder is replaced at boot time by the bootstrap script after
-#      detecting the private network IP from Hetzner metadata API.
+#      detecting the private network IP using metadata first, then kernel
+#      network state as a fallback.
 # See: https://developer.hashicorp.com/terraform/language/post-apply-operations
 %{ if INITIAL_MASTER ~}
 token: ${RKE_TOKEN}
@@ -17,7 +19,7 @@ tls-san:
   - ${SERVER_ADDRESS}
 cloud-provider-name: external
 cni: ${RKE2_CNI}
-node-ip: __NODE_IP__
+node-ip: __RKE2_NODE_PRIVATE_IPV4__
 %{ if ENABLE_SECRETS_ENCRYPTION ~}
 secrets-encryption: true
 %{ endif ~}

@@ -1,0 +1,28 @@
+# HCCM (Hetzner Cloud Controller Manager) Helm values
+# See: https://github.com/hetznercloud/hcloud-cloud-controller-manager
+#
+# DECISION: Minimal config — rely on chart defaults where possible.
+# Why: Reduces drift when upgrading chart versions.
+
+# NOTE: The hcloud token and network name are provided via a Secret
+# deployed by the presync hook (see hccm/manifests/secret.yaml).
+# The chart references the existing Secret "hcloud" by default.
+
+networking:
+  # DECISION: Enable network integration for pod-to-pod routing
+  # Why: Required for Hetzner private network support.
+  enabled: true
+
+env:
+  # NOTE: These reference the Secret created by the presync hook.
+  # The chart expects HCLOUD_TOKEN and optionally HCLOUD_NETWORK.
+  HCLOUD_TOKEN:
+    valueFrom:
+      secretKeyRef:
+        name: hcloud
+        key: token
+  HCLOUD_NETWORK:
+    valueFrom:
+      secretKeyRef:
+        name: hcloud
+        key: network

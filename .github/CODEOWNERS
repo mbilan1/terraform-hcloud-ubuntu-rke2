@@ -1,0 +1,4 @@
+# DECISION: Single owner for all paths — solo maintainer project.
+# Why: Ensures GitHub notifies the maintainer on every PR.
+#      Expand with team paths when contributors join.
+* @mbilan1

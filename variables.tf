@@ -5,15 +5,8 @@ variable "agent_node_count" {
   default     = 3
 }
 
-variable "allow_remote_manifest_downloads" {
-  description = "Allow downloading external manifests from GitHub at plan/apply time (System Upgrade Controller). Disable for stricter reproducibility/offline workflows."
-  type        = bool
-  nullable    = false
-  default     = true
-}
-
 variable "aws_access_key" {
-  description = "AWS access key for Route53 and cert-manager DNS-01 solver. If empty, uses default AWS credentials chain."
+  description = "AWS access key for Route53 DNS management. If empty, uses default AWS credentials chain."
   type        = string
   nullable    = false
   sensitive   = true
@@ -33,86 +26,25 @@ variable "aws_region" {
 }
 
 variable "aws_secret_key" {
-  description = "AWS secret key for Route53 and cert-manager DNS-01 solver. If empty, uses default AWS credentials chain."
+  description = "AWS secret key for Route53 DNS management. If empty, uses default AWS credentials chain."
   type        = string
   nullable    = false
   sensitive   = true
   default     = ""
 }
 
-# NOTE: The variable name "cluster_configuration" and several nested key names
-# (hcloud_controller.preinstall/.version, cert_manager.preinstall/.version/
-# .use_for_preinstalled_components, self_maintenance.system_upgrade_controller_version)
-# are derived from upstream wenzel-felix/terraform-hcloud-rke2 (MIT).
-# Extensively extended here: added hcloud_csi, etcd_backup, longhorn subsections,
-# release_name/namespace metadata, and 20 validation blocks.
-# See: NOTICE — Upstream-derived patterns, C5
+# DECISION: cluster_configuration reduced to infrastructure-only concerns.
+# Why: L4 addons (cert-manager, CSI, Longhorn, self-maintenance) are now
+#      managed outside Terraform via Helmfile/ArgoCD/Flux. Only etcd_backup
+#      remains because it is configured in cloud-init at RKE2 startup — a
+#      pure infrastructure concern, independent of cluster health.
+# See: charts/ directory for L4 addon values and Helmfile configuration.
 variable "cluster_configuration" {
   description = <<-EOT
-    Addon stack configuration — controls which Kubernetes components are pre-installed
-    and their Helm chart versions. Each subsection maps to a file in modules/addons/.
-    See README.md Inputs section for the full attribute reference and defaults.
+    Infrastructure-level configuration for the RKE2 cluster.
+    Currently contains etcd backup settings (configured via cloud-init).
   EOT
   type = object({
-    # ── Hetzner Cloud Controller Manager ──────────────────────────────────
-    # Manages node lifecycle, cloud routes, and LB reconciliation with the
-    # Hetzner Cloud API. Should almost always stay enabled.
-    hcloud_controller = optional(object({
-      preinstall = optional(bool, true)
-      version    = optional(string, "1.30.1")
-
-      # NOTE: Optional metadata for operators.
-      # Why: These fields are intentionally *not* consumed by the module today.
-      #      They exist to document intent and allow future extension without a
-      #      breaking variable-schema change.
-      release_name = optional(string, "")
-      namespace    = optional(string, "")
-    }), {})
-
-    # ── Hetzner CSI Driver ────────────────────────────────────────────────
-    # Provides ReadWriteOnce volumes backed by Hetzner Cloud Volumes.
-    # Can be demoted once Longhorn is battle-tested.
-    hcloud_csi = optional(object({
-      preinstall            = optional(bool, true)
-      version               = optional(string, "2.19.1")
-      default_storage_class = optional(bool, true)
-      reclaim_policy        = optional(string, "Delete")
-
-      # NOTE: Optional metadata for operators.
-      # Why: Keeping room for future chart knobs without forcing consumers to
-      #      upgrade their variable schema immediately.
-      release_name = optional(string, "")
-      namespace    = optional(string, "")
-    }), {})
-
-    # ── cert-manager (Jetstack) ───────────────────────────────────────────
-    # Automated TLS certificate lifecycle. Supports DNS-01 (Route53) and
-    # HTTP-01 ACME challenge types.
-    cert_manager = optional(object({
-      preinstall                      = optional(bool, true)
-      version                         = optional(string, "v1.19.3")
-      use_for_preinstalled_components = optional(bool, true)
-
-      # NOTE: Optional metadata for operators.
-      release_name = optional(string, "")
-      namespace    = optional(string, "")
-    }), {})
-
-    # ── Self-maintenance (Kured + SUC) ────────────────────────────────────
-    # Kured: unattended OS reboot daemon (cordon → reboot → uncordon).
-    # SUC: System Upgrade Controller for automated RKE2 patch upgrades.
-    # Both require HA (≥3 masters) and are gated in selfmaintenance.tf.
-    self_maintenance = optional(object({
-      kured_version                     = optional(string, "5.11.0")
-      system_upgrade_controller_version = optional(string, "0.19.0")
-
-      # NOTE: Optional metadata for operators.
-      # Why: Makes it easier to keep internal naming conventions consistent
-      #      across multiple clusters.
-      kured_release_name = optional(string, "")
-      suc_release_name   = optional(string, "")
-    }), {})
-
     # ── etcd snapshot + S3 offsite backup ─────────────────────────────────
     # DECISION: etcd backup via RKE2 native config.yaml params (zero dependencies)
     # Why: etcd snapshot is built into RKE2, configured in cloud-init before K8s starts.
@@ -136,53 +68,8 @@ variable "cluster_configuration" {
       # Why: Cron/schedule semantics sometimes depend on human conventions.
       description = optional(string, "")
     }), {})
-
-    # ── Longhorn distributed storage ──────────────────────────────────────
-    # DECISION: Longhorn as primary storage driver with native backup
-    # Why: Replication across workers (HA). Local NVMe IOPS (~50K vs ~10K).
-    #      Native VolumeSnapshot (Hetzner CSI has none — issue #849).
-    #      Integrated storage + backup in single component. Instant pre-upgrade snapshots.
-    #      Fewer components in restore path compared to external backup tools.
-    # NOTE: Longhorn is marked EXPERIMENTAL. Hetzner CSI retained as fallback.
-    # TODO: Promote Longhorn to default after battle-tested in production.
-    # See: docs/PLAN-operational-readiness.md — Step 2
-    longhorn = optional(object({
-      preinstall            = optional(bool, false)
-      version               = optional(string, "1.11.0")
-      replica_count         = optional(number, 2)
-      default_storage_class = optional(bool, true)
-      backup_target         = optional(string, "")
-      backup_schedule       = optional(string, "0 */6 * * *")
-      backup_retain         = optional(number, 10)
-      s3_endpoint           = optional(string, "")
-      s3_access_key         = optional(string, "")
-      s3_secret_key         = optional(string, "")
-
-      # Tuning (see PLAN-operational-readiness.md Appendix A)
-      guaranteed_instance_manager_cpu = optional(number, 12)
-      storage_over_provisioning       = optional(number, 100)
-      storage_minimal_available       = optional(number, 15)
-      snapshot_max_count              = optional(number, 5)
-
-      # NOTE: Optional metadata for operators.
-      release_name = optional(string, "")
-      namespace    = optional(string, "")
-    }), {})
   })
   default = {}
-
-  validation {
-    condition     = contains(["Delete", "Retain"], var.cluster_configuration.hcloud_csi.reclaim_policy)
-    error_message = "hcloud_csi.reclaim_policy must be either 'Delete' or 'Retain'."
-  }
-
-  validation {
-    # NOTE: This is a soft guardrail to catch obvious typos.
-    # Why: Helps users detect accidental values like "retain" early, without
-    #      changing any defaults or the module behavior.
-    condition     = can(regex("^(Delete|Retain)$", var.cluster_configuration.hcloud_csi.reclaim_policy))
-    error_message = "hcloud_csi.reclaim_policy must be exactly 'Delete' or 'Retain' (case-sensitive)."
-  }
 }
 
 variable "cluster_domain" {
@@ -199,18 +86,6 @@ variable "cluster_domain" {
     # NOTE: Keep this permissive (not a full RFC check) but avoid accidental whitespace.
     condition     = var.cluster_domain == trimspace(var.cluster_domain)
     error_message = "cluster_domain must not contain leading or trailing whitespace."
-  }
-}
-
-variable "cluster_issuer_name" {
-  description = "Name of the cert-manager ClusterIssuer. Defaults to 'harmony-letsencrypt-global' for compatibility with openedx-k8s-harmony Tutor plugin (hardcoded in k8s-services patch)."
-  type        = string
-  nullable    = false
-  default     = "harmony-letsencrypt-global"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.cluster_issuer_name))
-    error_message = "cluster_issuer_name must be a valid Kubernetes resource name (DNS label-ish)."
   }
 }
 
@@ -239,28 +114,7 @@ variable "control_plane_count" {
 }
 
 variable "create_dns_record" {
-  description = "Provision a Route53 wildcard DNS record (*.cluster_domain) pointing to the ingress load balancer. Requires harmony.enabled=true for the ingress LB to exist."
-  type        = bool
-  nullable    = false
-  default     = false
-}
-
-variable "enable_auto_kubernetes_updates" {
-  description = "Automatically upgrade RKE2 to the latest patch release within the configured channel using System Upgrade Controller (requires HA ≥ 3 masters). Gated by control_plane_count >= 3 at the addon level."
-  type        = bool
-  nullable    = false
-  default     = false
-}
-
-variable "enable_auto_os_updates" {
-  description = "Automatically apply OS security patches via unattended-upgrades and schedule reboots with Kured (requires HA ≥ 3 masters). Gated by control_plane_count >= 3 at the addon level."
-  type        = bool
-  nullable    = false
-  default     = false
-}
-
-variable "enable_nginx_modsecurity_waf" {
-  description = "Activate the ModSecurity web application firewall in the RKE2-bundled nginx ingress controller. Ineffective when Harmony deploys its own ingress-nginx."
+  description = "Provision a Route53 wildcard DNS record (*.cluster_domain) pointing to the ingress load balancer. Requires harmony_enabled=true for the ingress LB to exist."
   type        = bool
   nullable    = false
   default     = false
@@ -288,7 +142,7 @@ variable "enforce_single_country_workers" {
 }
 
 variable "extra_lb_ports" {
-  description = "Additional TCP ports to expose on the management load balancer beyond those needed for the K8s API and RKE2 join (e.g. [8080, 8443])."
+  description = "Additional TCP ports to expose on the ingress load balancer (requires harmony_enabled=true). These ports are forwarded to worker nodes, not the control-plane management LB (e.g. [8080, 8443])."
   type        = list(number)
   nullable    = false
   default     = []
@@ -299,32 +153,44 @@ variable "extra_lb_ports" {
   }
 }
 
-variable "harmony" {
-  description = <<-EOT
-    Harmony chart (openedx-k8s-harmony) integration.
-    - enabled: Deploy Harmony chart via Helm. Disables RKE2 built-in ingress-nginx and routes HTTP/HTTPS through the management LB.
-    - version: Chart version to install. Empty string means latest.
-    - extra_values: Additional values.yaml content (list of YAML strings) merged after infrastructure defaults.
-    - enable_default_tls_certificate: When true, the module creates a cert-manager Certificate for var.cluster_domain
-      and configures Harmony's ingress-nginx controller to use it as the default HTTPS certificate.
-    - default_tls_secret_name: Secret name (in the harmony namespace) used for the default TLS certificate.
-  EOT
-  type = object({
-    enabled      = optional(bool, false)
-    version      = optional(string, "")
-    extra_values = optional(list(string), [])
+# DECISION: harmony simplified to a boolean toggle for infrastructure.
+# Why: Harmony controls two infrastructure-level decisions:
+#   1. Whether the ingress LB is created (workers as targets for HTTP/HTTPS)
+#   2. Whether RKE2 built-in ingress is disabled via cloud-init
+# Everything else (chart version, values, TLS config) is now L4 configuration
+# managed via Helmfile/ArgoCD. See charts/harmony/ for values.
+variable "harmony_enabled" {
+  description = "Enable Harmony integration: creates the ingress load balancer and disables RKE2 built-in ingress. Harmony chart deployment is managed externally (Helmfile/ArgoCD)."
+  type        = bool
+  nullable    = false
+  default     = false
+}
 
-    # DECISION: TLS bootstrap for "platform is working" UX when Harmony is enabled.
-    # Why: openedx-k8s-harmony's echo Ingress is HTTP-only (no tls: block), so
-    #      ingress-nginx serves its self-signed "Fake Certificate" for catch-all HTTPS.
-    #      Providing a cert-manager Certificate + ingress-nginx default-ssl-certificate
-    #      makes https://<domain>/ present a valid cert out of the box, even before
-    #      Tutor/Open edX creates any TLS-enabled Ingress resources.
-    # See: https://kubernetes.github.io/ingress-nginx/user-guide/tls/#default-ssl-certificate
-    enable_default_tls_certificate = optional(bool, true)
-    default_tls_secret_name        = optional(string, "harmony-default-tls")
-  })
-  default = {}
+# DECISION: OpenBao as an optional secrets management layer (experimental).
+# Why: The default kubeconfig retrieval uses data \"external\" + SSH (simple, no
+#      extra dependencies). This is secure — SSH key is ephemeral, output is
+#      marked sensitive — but the kubeconfig ends up in Terraform state.
+#      Operators who need enterprise-grade secrets management (audit log,
+#      RBAC, auto-rotation, team access) can enable OpenBao in the cluster.
+#
+# SECURITY DISCLAIMER:
+#   With openbao_enabled = false (default), kubeconfig security is the
+#   OPERATOR'S responsibility:
+#     - Terraform state contains the kubeconfig (protect with encrypted backend + ACL)
+#     - `tofu output -raw kube_config` prints it to stdout (do not pipe to logs)
+#     - The SSH private key exists only in state (never written to disk unless
+#       save_ssh_key_locally = true)
+#   The module does NOT guarantee that credentials never leak — it marks outputs
+#   as sensitive and uses ephemeral channels, but the operator must secure the
+#   state file and output handling.
+#
+# See: charts/openbao/ for Helmfile deployment
+# See: docs/ARCHITECTURE.md — OpenBao Integration
+variable "openbao_enabled" {
+  description = "[EXPERIMENTAL] Enable OpenBao (open-source Vault) deployment in the cluster for secrets management. Generates a bootstrap token for initial operator access. Requires agent_node_count >= 1 and enable_secrets_encryption = true."
+  type        = bool
+  nullable    = false
+  default     = false
 }
 
 variable "hcloud_api_token" {
@@ -356,6 +222,15 @@ variable "hcloud_network_zone" {
   type        = string
   nullable    = false
   default     = "eu-central"
+
+  # DECISION: Validate against known Hetzner network zones.
+  # Why: Invalid zone causes cryptic API errors at apply time.
+  #      Early validation gives immediate, actionable feedback.
+  # See: https://docs.hetzner.cloud/#networks
+  validation {
+    condition     = contains(["eu-central", "us-east", "us-west", "ap-southeast"], var.hcloud_network_zone)
+    error_message = "hcloud_network_zone must be one of: eu-central, us-east, us-west, ap-southeast."
+  }
 }
 
 variable "health_check_urls" {
@@ -402,37 +277,6 @@ variable "k8s_api_allowed_cidrs" {
   }
 }
 
-# DECISION: Pin RKE2 to v1.34.x (latest Rancher-supported line, ~8 months support remaining)
-# Why: Unpinned installs from 'stable' channel produce non-reproducible clusters.
-#      v1.34 is the newest line in the SUSE Rancher support matrix (v1.32–v1.34).
-#      v1.35 is not yet in the support matrix. v1.32 is at EOL (~Feb 2026).
-# See: https://www.suse.com/suse-rancher/support-matrix/
-# See: https://github.com/rancher/rke2/releases/tag/v1.34.4%2Brke2r1
-variable "kubernetes_version" {
-  description = "Specific RKE2 release tag to deploy (e.g. 'v1.34.4+rke2r1'). Leave empty to pull the latest from the stable channel."
-  type        = string
-  nullable    = false
-  default     = "v1.34.4+rke2r1"
-
-  validation {
-    # NOTE: Allow empty string for "stable channel" installs.
-    condition     = var.kubernetes_version == "" || can(regex("^v\\d+\\.\\d+\\.\\d+\\+rke2r\\d+$", var.kubernetes_version))
-    error_message = "kubernetes_version must look like 'vX.Y.Z+rke2rN' (or be empty)."
-  }
-}
-
-variable "letsencrypt_issuer" {
-  description = "Contact email address registered with the ACME provider (Let's Encrypt) for certificate lifecycle and revocation alerts"
-  type        = string
-  nullable    = false
-  default     = ""
-
-  validation {
-    condition     = var.letsencrypt_issuer == "" || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.letsencrypt_issuer))
-    error_message = "letsencrypt_issuer must be a valid email address or empty string."
-  }
-}
-
 variable "load_balancer_location" {
   description = "Hetzner datacenter location where both load balancers will be provisioned (e.g. 'hel1', 'nbg1', 'fsn1')"
   type        = string
@@ -443,13 +287,6 @@ variable "load_balancer_location" {
     condition     = length(var.load_balancer_location) > 0
     error_message = "load_balancer_location must not be empty."
   }
-}
-
-variable "master_node_image" {
-  description = "OS image identifier for control-plane servers (e.g. 'ubuntu-24.04')"
-  type        = string
-  nullable    = false
-  default     = "ubuntu-24.04"
 }
 
 variable "master_node_locations" {
@@ -464,13 +301,6 @@ variable "master_node_server_type" {
   type        = string
   nullable    = false
   default     = "cx23"
-}
-
-variable "nginx_ingress_proxy_body_size" {
-  description = "Default max request body size for the nginx ingress controller. Set to 100m for Harmony/Open edX compatibility (course uploads)."
-  type        = string
-  nullable    = false
-  default     = "100m"
 }
 
 variable "node_locations" {
@@ -517,7 +347,7 @@ variable "save_ssh_key_locally" {
 # Why default to open (0.0.0.0/0) instead of closed ([]):
 #
 # 1. The module uses terraform_data provisioners (wait_for_api, wait_for_cluster_ready)
-#    and data.remote_file (kubeconfig) that SSH into master[0] over its PUBLIC IP.
+#    and data.external (kubeconfig fetch script) that SSH into master[0] over its PUBLIC IP.
 #    If SSH is blocked by the firewall, `tofu apply` hangs indefinitely.
 #
 # 2. Auto-detecting the runner's IP via `data "http"` is fragile:
@@ -570,13 +400,6 @@ variable "subnet_address" {
   }
 }
 
-variable "worker_node_image" {
-  description = "OS image identifier for agent (worker) servers"
-  type        = string
-  nullable    = false
-  default     = "ubuntu-24.04"
-}
-
 variable "worker_node_locations" {
   description = "Optional list of Hetzner locations to place worker nodes. If empty, node_locations is used. Why: lets you keep workload I/O local (e.g., Germany-only) while masters can span more regions."
   type        = list(string)
@@ -590,4 +413,3 @@ variable "worker_node_server_type" {
   nullable    = false
   default     = "cx23"
 }
-

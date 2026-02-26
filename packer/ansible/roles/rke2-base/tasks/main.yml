@@ -76,6 +76,10 @@
     sh -c "$(curl -sfL https://get.rke2.io)"
   args:
     creates: /usr/local/bin/rke2
+    # WORKAROUND: /bin/sh on Ubuntu 24.04 is dash, which does not support pipefail.
+    # Why: The shell block uses set -euo pipefail for safe error handling.
+    # TODO: Remove when Ansible changes its default shell to bash.
+    executable: /bin/bash
   retries: 3
   delay: 10
 
@@ -91,6 +95,8 @@
   args:
     # NOTE: rke2-agent.service appears only after agent install; use as idempotency marker.
     creates: /usr/local/lib/systemd/system/rke2-agent.service
+    # WORKAROUND: /bin/sh on Ubuntu 24.04 is dash, which does not support pipefail.
+    executable: /bin/bash
   retries: 3
   delay: 10
 

@@ -1,0 +1,36 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# SAST: gitleaks
+#
+# Secrets scanning — detects hardcoded API tokens, passwords, private keys.
+# Badge: SAST: gitleaks
+#
+# DECISION: Scan full git history on PRs, diff-only on pushes.
+# Why: PRs should verify no secrets exist in the entire branch diff.
+#      Push scans only the new commits (faster, less noise on main).
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: "SAST: gitleaks"
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

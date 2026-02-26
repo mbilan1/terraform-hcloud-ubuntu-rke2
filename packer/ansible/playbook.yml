@@ -5,9 +5,25 @@
 # Why: Declarative, idempotent, testable. Packer shell scripts would be
 #      procedural and harder to maintain/extend.
 # See: docs/ARCHITECTURE.md — L1 (Packer + Ansible)
+#
+# DECISION: Two-phase playbook — rke2-base (always) + cis-hardening (opt-in).
+# Why: rke2-base installs packages, kernel modules, and RKE2 binaries that
+#      every node needs. cis-hardening applies CIS Level 1 benchmark controls
+#      and is gated by the enable_cis_hardening variable (Packer feature flag).
+#      This keeps the base image lean for development while offering a hardened
+#      variant for production.
 
 - name: Prepare RKE2 base image
   hosts: all
   become: true
   roles:
+    # Phase 1: Always — packages, kernel modules, sysctl, RKE2 binaries.
     - rke2-base
+
+    # Phase 2: Optional — CIS Level 1 hardening (Ubuntu 24.04 CIS Benchmark v1.0.0).
+    # DECISION: Conditional inclusion via Packer extra_vars.
+    # Why: The feature flag allows building both hardened and unhardened images
+    #      from the same Packer template. Unhardened images are faster to build
+    #      (~2 min vs ~8 min) and suitable for dev/test environments.
+    - role: cis-hardening
+      when: enable_cis_hardening | default(false) | bool
